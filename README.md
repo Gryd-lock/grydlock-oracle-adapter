@@ -140,10 +140,13 @@ const score = await oracle.getScore('GAKNOWNWASHTRADERWALLETEXAMPLE'); // 95
 
 ## Tech Stack
 
-- **TypeScript**
-- **Soroban SDK** — reading the on-chain score
-- **Stellar SDK (JS)** — address / asset handling
-- **Stellar Testnet** — all development
+- **TypeScript** (strict mode)
+- **Vitest** — test runner
+- **ESLint** + **typescript-eslint** — linting
+- **Prettier** — formatting
+- **Soroban SDK** _(planned)_ — reading the on-chain score
+- **Stellar SDK (JS)** _(planned)_ — address / asset handling
+- **Stellar Testnet** _(planned)_ — all development
 
 ## Testing
 
