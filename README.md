@@ -97,22 +97,28 @@ showWarning(score); // extension maps score → tier
 
 ## Repository Structure
 
-<!-- TODO: update once the real layout exists -->
-
 ```
 grydlock-oracle-adapter/
 │
 ├── README.md                         ← This file
-├── package.json                      ← Placeholder — not yet created
-├── tsconfig.json                     ← Placeholder — not yet created
+├── package.json                      ← Package manifest and npm scripts
+├── tsconfig.json                     ← TypeScript compiler config (strict mode)
+├── eslint.config.mjs                 ← ESLint flat config
+├── .prettierrc.json                  ← Prettier config
+├── vitest.config.ts                  ← Vitest config
 │
-├── src/                               ← Placeholder — not yet created
-│   ├── RiskOracle.ts                  ← Interface definition (planned)
-│   ├── StubOracle.ts                  ← Stub implementation (planned)
-│   └── SorobanOracle.ts               ← Live oracle client (planned)
+├── .github/workflows/ci.yml          ← CI: typecheck, lint, format check, test, build
 │
-└── tests/                            ← Placeholder — not yet created
+├── src/
+│   ├── RiskOracle.ts                  ← Interface definition
+│   ├── StubOracle.ts                  ← Hardcoded lookup-table implementation
+│   └── index.ts                       ← Barrel export
+│
+└── tests/
+    └── StubOracle.test.ts             ← getScore range test
 ```
+
+`SorobanOracle` is not yet in `src/` — see [Roadmap](#roadmap).
 
 ## Quick Start
 
