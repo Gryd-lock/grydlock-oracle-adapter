@@ -249,11 +249,9 @@ how loudly to warn:
 
 ## Support
 
-<!-- TODO: add real issue tracker / community links -->
-
 For issues and questions:
 
-- GitHub Issues: Create an issue in this repo
+- GitHub Issues: https://github.com/Gryd-lock/grydlock-oracle-adapter/issues
 - Stellar Discord: https://discord.gg/stellar
 
 ---
