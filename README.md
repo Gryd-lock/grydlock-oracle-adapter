@@ -122,9 +122,21 @@ grydlock-oracle-adapter/
 
 ## Quick Start
 
-<!-- TODO: replace with real setup steps once package.json / src exist -->
+```bash
+npm install
+npm run build      # compile src/ to dist/
+npm test           # run the test suite
+npm run typecheck  # tsc --noEmit
+npm run lint       # eslint .
+npm run format     # prettier --write .
+```
 
-Not yet available — the package is still in the interface-design phase. See [Roadmap](#roadmap) for the path to a working `StubOracle`.
+```ts
+import { StubOracle } from './src';
+
+const oracle = new StubOracle();
+const score = await oracle.getScore('GAKNOWNWASHTRADERWALLETEXAMPLE'); // 95
+```
 
 ## Tech Stack
 
