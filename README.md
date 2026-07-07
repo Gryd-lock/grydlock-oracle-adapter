@@ -11,7 +11,7 @@ Read-client that fetches a 0–100 risk score for a Stellar address or asset fro
 
 `grydlock-oracle-adapter` is the closest thing Gryd Lock has to a backend — but it runs no server. It is a small, read-only client: given a destination, it calls a Soroban smart contract, reads a score, and returns it. Nothing more.
 
-> **Status:** `StubOracle` is implemented and returning scores. A live oracle connection is **not yet wired.**
+> **Status:** `StubOracle` is implemented and returns scores from the vendored `grydlock-testkit` fixtures. A live oracle connection is **not yet wired.**
 
 ### The Problem
 
@@ -32,7 +32,7 @@ At a high level, it does one thing, deliberately narrowly scoped:
 ## Features
 
 - **`RiskOracle` interface** — one method, `getScore(destination)`, that both implementations satisfy
-- **`StubOracle`** — fixed or lookup-table score source for local development and the `grydlock-testkit` evaluation; no network calls
+- **`StubOracle`** — lookup-table score source backed by vendored `grydlock-testkit` fixtures, for local development and the `grydlock-testkit` evaluation; no network calls
 - **`SorobanOracle`** _(planned)_ — calls `get_score()` on the live on-chain risk oracle contract and returns the result
 - **Caching and fallback** _(planned)_ — a slow or unreachable oracle degrades gracefully instead of stalling the signing flow
 
@@ -64,11 +64,15 @@ graph TB
 
 ### Core Components
 
-| Component              | Role                                              | Status              |
-| ---------------------- | ------------------------------------------------- | ------------------- |
-| `src/RiskOracle.ts`    | Defines the `getScore(destination)` contract      | Implemented         |
-| `src/StubOracle.ts`    | Hardcoded lookup-table score source for local dev | Implemented, tested |
-| `src/SorobanOracle.ts` | Live client against the on-chain oracle contract  | Not started         |
+| Component              | Role                                                                      | Status              |
+| ---------------------- | ------------------------------------------------------------------------- | ------------------- |
+| `src/RiskOracle.ts`    | Defines the `getScore(destination)` contract                              | Implemented         |
+| `src/StubOracle.ts`    | Lookup-table score source, backed by vendored `grydlock-testkit` fixtures | Implemented, tested |
+| `src/SorobanOracle.ts` | Live client against the on-chain oracle contract                          | Not started         |
+
+`src/fixtures/testkit/` is a vendored, point-in-time copy of `grydlock-testkit`'s
+`destinations.json` and `scores.json` — not a live sync. If the testkit fixtures change, re-copy
+them here to pick up the update.
 
 ## Interface (design)
 
@@ -84,7 +88,7 @@ interface RiskOracle {
 
 The extension depends on this shape and nothing beneath it. Two implementations are planned:
 
-- **StubOracle** — returns a fixed or lookup-table score. Used for development and for the `grydlock-testkit` evaluation. No network.
+- **StubOracle** — returns a score from the vendored `grydlock-testkit` fixture lookup table (falling back to a default for unrecognized destinations). Used for development and for the `grydlock-testkit` evaluation. No network.
 - **SorobanOracle** — calls `get_score()` on the live on-chain risk oracle contract and returns the result. Wired in a later phase.
 
 ## How the Extension Uses It
@@ -112,12 +116,13 @@ grydlock-oracle-adapter/
 │
 ├── src/
 │   ├── RiskOracle.ts                  ← Interface definition
-│   ├── StubOracle.ts                  ← Hardcoded lookup-table implementation
+│   ├── StubOracle.ts                  ← Lookup-table implementation, backed by fixtures/
 │   ├── SorobanOracle.ts               ← Live oracle client (planned, not yet in src/)
+│   ├── fixtures/testkit/              ← Vendored grydlock-testkit fixtures (destinations.json, scores.json)
 │   └── index.ts                       ← Barrel export
 │
 └── tests/
-    └── StubOracle.test.ts             ← getScore range test
+    └── StubOracle.test.ts             ← getScore range + label-ordering tests against the fixtures
 ```
 
 ## Quick Start
@@ -135,7 +140,7 @@ npm run format     # prettier --write .
 import { StubOracle } from './src';
 
 const oracle = new StubOracle();
-const score = await oracle.getScore('GAKNOWNWASHTRADERWALLETEXAMPLE'); // 95
+const score = await oracle.getScore('GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET'); // 95, labelled "malicious" in grydlock-testkit
 ```
 
 ## Tech Stack
@@ -153,11 +158,13 @@ npm test
 
 Covers:
 
-- `StubOracle.getScore` returns a number within 0–100 for both known (mapped) and unrecognized destinations
+- `StubOracle.getScore` returns a number within 0–100 for every destination in the vendored `grydlock-testkit` fixtures, and a default score for unrecognized destinations
+- Fixture destinations labelled `malicious` score higher than those labelled `clean`
 
 ## Roadmap
 
 - [x] Define the `RiskOracle` interface and ship `StubOracle`
+- [x] Back `StubOracle` with vendored `grydlock-testkit` fixtures instead of a hardcoded table
 - [ ] Wire `StubOracle` into the extension and confirm the query path end to end on testnet
 - [ ] Implement `SorobanOracle` against a live oracle contract on testnet
 - [ ] Add caching and a timeout / fallback so a slow or unreachable oracle degrades gracefully instead of stalling the signing flow
@@ -198,11 +205,11 @@ Quick checklist for contributions:
 
 Gryd Lock is split across four repos in the `Gryd-lock` GitHub org:
 
-| Repo                                                                    | Role                                                                                                                                                                       | Has code?                                                |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| [`grydlock-research`](https://github.com/Gryd-lock/grydlock-research)   | Design study: threat model, system design, warning-tier thresholds, evaluation methodology. The reasoning the other three repos implement.                                 | No — design docs only                                    |
-| [`grydlock-extension`](https://github.com/Gryd-lock/grydlock-extension) | Browser extension. Intercepts a wallet's signing flow (Freighter first), decodes the pending transaction, asks the oracle adapter for a score, and shows a tiered warning. | Yes — early build: Freighter intercept, XDR decode, and warning popup implemented |
-| **`grydlock-oracle-adapter`** _(this repo)_                             | Read-only client. Exposes `RiskOracle.getScore(destination)` to the extension; backed by `StubOracle` today, `SorobanOracle` later.                                        | Yes — `RiskOracle` + `StubOracle` implemented and tested |
+| Repo                                                                    | Role                                                                                                                                                                       | Has code?                                                                                             |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [`grydlock-research`](https://github.com/Gryd-lock/grydlock-research)   | Design study: threat model, system design, warning-tier thresholds, evaluation methodology. The reasoning the other three repos implement.                                 | No — design docs only                                                                                 |
+| [`grydlock-extension`](https://github.com/Gryd-lock/grydlock-extension) | Browser extension. Intercepts a wallet's signing flow (Freighter first), decodes the pending transaction, asks the oracle adapter for a score, and shows a tiered warning. | Yes — early build: Freighter intercept, XDR decode, and warning popup implemented                     |
+| **`grydlock-oracle-adapter`** _(this repo)_                             | Read-only client. Exposes `RiskOracle.getScore(destination)` to the extension; backed by `StubOracle` today, `SorobanOracle` later.                                        | Yes — `RiskOracle` + `StubOracle` implemented and tested                                              |
 | [`grydlock-testkit`](https://github.com/Gryd-lock/grydlock-testkit)     | Testnet fixtures and stub scores used to evaluate the extension + adapter together.                                                                                        | Yes — labelled destinations, stub scores, and sample XDRs implemented, with a fixture validator in CI |
 
 ### How a signing flow moves through them

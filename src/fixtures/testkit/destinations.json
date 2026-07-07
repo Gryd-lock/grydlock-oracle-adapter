@@ -1,0 +1,90 @@
+{
+  "$schema": "Synthetic Stellar testnet fixtures for Gryd Lock evaluation. All addresses below are randomly generated (not real, funded, or attributable to any person or entity) — they exist only to give the evaluation a known ground truth to score against.",
+  "destinations": [
+    {
+      "id": "GCRRYBV5IY7DSI54DKW33ZELC2LWYCAHC43TXAM2A2HTFN5GWOFWXPC2",
+      "type": "account",
+      "address": "GCRRYBV5IY7DSI54DKW33ZELC2LWYCAHC43TXAM2A2HTFN5GWOFWXPC2",
+      "label": "clean",
+      "notes": "Established testnet wallet with regular payment history; no red flags."
+    },
+    {
+      "id": "GA4HFFSHZ7PADQWOFCZGYV2HE437LQ2WDILWCGC33BMJUQ6OBO5HKI5D",
+      "type": "account",
+      "address": "GA4HFFSHZ7PADQWOFCZGYV2HE437LQ2WDILWCGC33BMJUQ6OBO5HKI5D",
+      "label": "clean",
+      "notes": "Long-lived wallet, low transaction velocity, no shared funding source with flagged accounts."
+    },
+    {
+      "id": "GCER76PMMAKI2S6UUCPOFXC4SMY3IEILVE5MKSX4CTNDXXIZMFDXJJVS",
+      "type": "account",
+      "address": "GCER76PMMAKI2S6UUCPOFXC4SMY3IEILVE5MKSX4CTNDXXIZMFDXJJVS",
+      "label": "clean",
+      "notes": "Holds a USDC trustline against usdc_issuer below; normal trading activity."
+    },
+    {
+      "id": "GBWPMNXNRLA3VMBTWZHWN7VLUZPXBZUEOMPD6OIQKYCZNDJ2SY4ACC5B",
+      "type": "account",
+      "address": "GBWPMNXNRLA3VMBTWZHWN7VLUZPXBZUEOMPD6OIQKYCZNDJ2SY4ACC5B",
+      "label": "clean",
+      "notes": "Fixture stand-in for a well-known, long-lived asset issuer (issues USDC below)."
+    },
+    {
+      "id": "GCRNKXJJLZNDLK2EWPX25JISTORCXCF2HYUXMYKF7XWKHMEOHCXVGP4J",
+      "type": "account",
+      "address": "GCRNKXJJLZNDLK2EWPX25JISTORCXCF2HYUXMYKF7XWKHMEOHCXVGP4J",
+      "label": "suspicious",
+      "notes": "Funded seconds before a large outgoing payment burst; pattern consistent with a pass-through wallet."
+    },
+    {
+      "id": "GDL4JRQOHLJARTSQMZCBANXJ6GI6BN2QG2TX6ZPC5KSHKJCDEM735BYJ",
+      "type": "account",
+      "address": "GDL4JRQOHLJARTSQMZCBANXJ6GI6BN2QG2TX6ZPC5KSHKJCDEM735BYJ",
+      "label": "suspicious",
+      "notes": "Shares a funding source with malicious_wallet_1 and malicious_wallet_2 below."
+    },
+    {
+      "id": "GCHYSQ57SVW6LFLGLQ4P77ZDQJ7BPQIM3QOCPIBIZKXGZGAQMJQZRFMS",
+      "type": "account",
+      "address": "GCHYSQ57SVW6LFLGLQ4P77ZDQJ7BPQIM3QOCPIBIZKXGZGAQMJQZRFMS",
+      "label": "suspicious",
+      "notes": "Holds a trustline to the SCAM asset listed below; no other activity."
+    },
+    {
+      "id": "GD7XPB2A7CG5Z4ICV24B3LXCRHAEJRFEK4OEW3ZIOQAPJOHAXBB7QHGE",
+      "type": "account",
+      "address": "GD7XPB2A7CG5Z4ICV24B3LXCRHAEJRFEK4OEW3ZIOQAPJOHAXBB7QHGE",
+      "label": "malicious",
+      "notes": "Path-payment sweep pattern: drains newly funded wallets within seconds of receiving deposits."
+    },
+    {
+      "id": "GCAMGLMB5EN55ICM26RYDGZSE5P4GKMK6TD6ZB7LACMVE7IEDTWVYZDF",
+      "type": "account",
+      "address": "GCAMGLMB5EN55ICM26RYDGZSE5P4GKMK6TD6ZB7LACMVE7IEDTWVYZDF",
+      "label": "malicious",
+      "notes": "Repeated small 'test' payments precede a large drain; matches a known phishing-drainer shape."
+    },
+    {
+      "id": "GDQPZVGOJY6Q4PPASHZBIFN3PTIBD6WCRDCCAIFIPHZIYKSDQ7PZWPNJ",
+      "type": "account",
+      "address": "GDQPZVGOJY6Q4PPASHZBIFN3PTIBD6WCRDCCAIFIPHZIYKSDQ7PZWPNJ",
+      "label": "malicious",
+      "notes": "Destination of multiple change-trust + immediate max-sell patterns typical of rug-pull collection wallets."
+    },
+    {
+      "id": "GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET",
+      "type": "account",
+      "address": "GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET",
+      "label": "malicious",
+      "notes": "Issuer of the SCAM asset below; no distributed supply outside the issuer's own control."
+    },
+    {
+      "id": "SCAM:GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET",
+      "type": "asset",
+      "asset_code": "SCAM",
+      "asset_issuer": "GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET",
+      "label": "malicious",
+      "notes": "Newly issued token with no liquidity outside the issuer; classic rug-pull setup."
+    }
+  ]
+}
