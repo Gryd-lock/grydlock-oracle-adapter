@@ -150,9 +150,13 @@ const score = await oracle.getScore('GAKNOWNWASHTRADERWALLETEXAMPLE'); // 95
 
 ## Testing
 
-<!-- TODO: fill in once a test runner and real tests exist -->
+```bash
+npm test
+```
 
-No tests exist yet. Test tooling and coverage will be documented here once `StubOracle` lands.
+Covers:
+
+- `StubOracle.getScore` returns a number within 0–100 for both known (mapped) and unrecognized destinations
 
 ## Roadmap
 
