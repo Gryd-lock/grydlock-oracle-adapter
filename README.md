@@ -74,6 +74,22 @@ graph TB
 `destinations.json` and `scores.json` — not a live sync. If the testkit fixtures change, re-copy
 them here to pick up the update.
 
+Because these files are manually copied rather than pulled in as a dependency, a bad copy —
+truncated file, wrong schema version, non-numeric score — would otherwise pass TypeScript's
+structural typing silently and only surface as a confusing runtime failure. To catch that at the
+source, `src/fixtures/testkit/schema.ts` validates the shape of both files, and
+`src/fixtures/testkit/index.ts` runs that validation once, when the module is first imported
+(not on every `StubOracle.getScore()` call). A malformed fixture throws a `FixtureValidationError`
+naming the offending file and field, e.g.:
+
+```
+FixtureValidationError: Invalid vendored fixture "scores.json": score for "GABC..." must be a finite number, got string ("10")
+```
+
+`StubOracle` and the test suite both import the validated `scores` / `destinations` exports from
+`src/fixtures/testkit/index.ts` rather than reading the JSON files directly, so any re-copy of the
+testkit fixtures is checked before it can reach either.
+
 ## Interface (design)
 
 The adapter exposes one job: turn a destination into a score.
@@ -120,11 +136,16 @@ grydlock-oracle-adapter/
 │   ├── RiskOracle.ts                  ← Interface definition
 │   ├── StubOracle.ts                  ← Lookup-table implementation, backed by fixtures/
 │   ├── SorobanOracle.ts               ← Live oracle client (planned, not yet in src/)
-│   ├── fixtures/testkit/              ← Vendored grydlock-testkit fixtures (destinations.json, scores.json)
+│   ├── fixtures/testkit/
+│   │   ├── destinations.json          ← Vendored grydlock-testkit fixture (labelled destinations)
+│   │   ├── scores.json                ← Vendored grydlock-testkit fixture (destination -> score)
+│   │   ├── schema.ts                  ← Runtime shape validation for both fixture files
+│   │   └── index.ts                   ← Validates + exports the fixtures once, at module load
 │   └── index.ts                       ← Barrel export
 │
 └── tests/
-    └── StubOracle.test.ts             ← getScore range + label-ordering tests against the fixtures
+    ├── StubOracle.test.ts             ← getScore range + label-ordering tests against the fixtures
+    └── fixtureSchema.test.ts          ← Asserts malformed fixtures are rejected with a clear error
 ```
 
 ## Quick Start
