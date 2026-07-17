@@ -20,6 +20,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "sync:check": "node scripts/check-cross-repo-sync.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

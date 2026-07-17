@@ -115,6 +115,10 @@ grydlock-oracle-adapter/
 │
 ├── .husky/commit-msg                 ← Local commit-msg hook, runs commitlint
 ├── .github/workflows/ci.yml          ← CI: typecheck, lint, format check, test, build, commitlint
+├── .github/workflows/cross-repo-sync.yml ← Weekly shared-contract drift check vs research/extension repos
+│
+├── scripts/
+│   └── check-cross-repo-sync.mjs     ← Fetch + diff shared contracts from the other Gryd-lock repos
 │
 ├── src/
 │   ├── RiskOracle.ts                  ← Interface definition
@@ -136,6 +140,7 @@ npm test           # run the test suite
 npm run typecheck  # tsc --noEmit
 npm run lint       # eslint .
 npm run format     # prettier --write .
+npm run sync:check # verify shared contracts against the other Gryd-lock repos
 ```
 
 ```ts
@@ -300,12 +305,39 @@ how loudly to warn:
 | 51–75  | High     | Strong warning, require confirm |
 | 76–100 | Critical | Recommend abort                 |
 
+### Verifying cross-repo sync (canonical method)
+
+Don't verify the shared contracts above by reading READMEs across repos — that's exactly the
+manual process that lets drift slip through. The canonical way to check sync is:
+
+```bash
+npm run sync:check
+```
+
+`scripts/check-cross-repo-sync.mjs` fetches the current state of the contracts from the other
+public repos and diffs them against this repo:
+
+- **Warning tiers** — parses the canonical table in `grydlock-research`'s README and compares
+  it against both `grydlock-extension`'s implementation (`src/lib/tiers.ts`) and this repo's
+  own README table
+- **`RiskOracle.getScore`** — compares the signature in `src/RiskOracle.ts` against the
+  stand-in the extension declares in `src/adapter/oracleAdapter.ts`
+
+On drift it prints a PASS/FAIL report with the expected (canonical) vs actual values, writes
+`drift-report.md`, and exits non-zero. CI runs it weekly (Mondays 06:00 UTC, plus on PRs that
+touch a contract surface — see `.github/workflows/cross-repo-sync.yml`), since drift
+originates in the other repos rather than in pushes here; a scheduled run that finds drift
+automatically opens (or updates) a tracking issue labelled `cross-repo-drift`. A fetch or
+parse failure exits with a distinct code (2) and is reported as "needs a human look", not as
+confirmed drift.
+
 ### Conventions for AI Agents
 
 - Treat this section as the source of truth for **cross-repo** context. Each repo's own README
   covers repo-local conventions.
 - Before assuming a name/function/interface still exists in another repo, verify it there — this
-  reflects each repo's state as of the last time it was checked, not a live feed.
+  reflects each repo's state as of the last time it was checked, not a live feed. For the two
+  shared contracts above, run `npm run sync:check` instead of eyeballing.
 - If a change here affects `RiskOracle` or the warning-tier thresholds, call it out so the
   corresponding repo can be updated.
 
