@@ -33,5 +33,8 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.63.0",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^16.0.1"
   }
 }
