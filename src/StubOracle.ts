@@ -14,8 +14,22 @@ const DEFAULT_SCORE = 0;
  * signing flow can be built and tested with no live oracle and no
  * network access.
  */
+import { Logger, NoopLogger } from './Logger';
+
 export class StubOracle implements RiskOracle {
+  constructor(private readonly logger: Logger = NoopLogger) {}
+
   async getScore(destination: string): Promise<number> {
-    return SCORES[destination] ?? DEFAULT_SCORE;
+    const score = SCORES[destination] ?? DEFAULT_SCORE;
+
+    // Keep this behind debug; production consumers can wire a real logger.
+    this.logger.debug('StubOracle.getScore', {
+      destination,
+      score,
+      hit: SCORES[destination] !== undefined,
+    });
+
+    return score;
   }
 }
+

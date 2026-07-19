@@ -139,11 +139,26 @@ npm run format     # prettier --write .
 ```
 
 ```ts
-import { StubOracle } from './src';
+import { CoalescingOracle, Logger, StubOracle } from './src';
 
-const oracle = new StubOracle();
-const score = await oracle.getScore('GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET'); // 95, labelled "malicious" in grydlock-testkit
+// Optional: structured logger injection (no-op by default).
+const logger: Logger = {
+  debug: (message, meta) => console.debug(message, meta),
+  info: (message, meta) => console.info(message, meta),
+  warn: (message, meta) => console.warn(message, meta),
+  error: (message, meta) => console.error(message, meta),
+};
+
+const oracle = new CoalescingOracle(
+  new StubOracle(logger),
+  logger,
+);
+
+const score = await oracle.getScore(
+  'GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET',
+); // 95, labelled "malicious" in grydlock-testkit
 ```
+
 
 ## Tech Stack
 

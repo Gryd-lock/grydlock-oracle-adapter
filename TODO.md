@@ -1,9 +1,9 @@
-# TODO - De-duplicate concurrent getScore calls
+# TODO
 
-- [x] Implement `CoalescingOracle` decorator (request coalescing via in-flight promise map)
-- [x] Export it from `src/index.ts`
-
-- [x] Add Vitest unit tests with controlled promise resolution
-- [ ] Run `npm test` and ensure lint/typecheck pass
-
+- [x] Add an injectable structured logger interface (Logger + NoopLogger)
+- [x] Inject logger into oracle implementations (StubOracle + CoalescingOracle)
+- [x] Export Logger/NoopLogger from src/index.ts
+- [x] Remove/avoid implicit console usage from src/
+- [ ] Document example wiring in README.md
+- [ ] Run typecheck + tests
 

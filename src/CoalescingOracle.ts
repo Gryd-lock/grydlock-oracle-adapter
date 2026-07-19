@@ -1,4 +1,5 @@
 import { RiskOracle } from './RiskOracle';
+import { Logger, NoopLogger } from './Logger';
 
 /**
  * Decorator that de-duplicates concurrent `getScore(destination)` calls.
@@ -9,13 +10,19 @@ import { RiskOracle } from './RiskOracle';
 export class CoalescingOracle implements RiskOracle {
   private readonly inFlightByDestination = new Map<string, Promise<number>>();
 
-  constructor(private readonly inner: RiskOracle) {}
+  constructor(
+    private readonly inner: RiskOracle,
+    private readonly logger: Logger = NoopLogger,
+  ) {}
 
   async getScore(destination: string): Promise<number> {
     const existing = this.inFlightByDestination.get(destination);
     if (existing) {
+      this.logger.debug('CoalescingOracle.coalesced', { destination });
       return existing;
     }
+
+    this.logger.debug('CoalescingOracle.inFlightStart', { destination });
 
     const p = this.inner.getScore(destination);
     this.inFlightByDestination.set(destination, p);
@@ -26,10 +33,19 @@ export class CoalescingOracle implements RiskOracle {
       // Only delete if it's still the same promise instance.
       if (this.inFlightByDestination.get(destination) === p) {
         this.inFlightByDestination.delete(destination);
+        this.logger.debug('CoalescingOracle.inFlightEnd', { destination });
       }
+    });
+
+    p.catch((err) => {
+      // Attach a logger side-effect without changing the thrown error.
+      this.logger.warn('CoalescingOracle.innerFailed', { destination, err });
+      throw err;
     });
 
     return p;
   }
 }
+
+
 
