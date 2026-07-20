@@ -8,11 +8,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      # Report every version's result instead of cancelling siblings on the
+      # first failure, so a version-specific break is visible in one run.
+      fail-fast: false
+      matrix:
+        # Covers the engines floor (>=20) and the newer active LTS lines.
+        node-version: [20, 22, 24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
       - run: npm run typecheck
@@ -20,6 +27,7 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
+      - run: npm run docs:check
 
   commitlint:
     if: github.event_name == 'pull_request'
