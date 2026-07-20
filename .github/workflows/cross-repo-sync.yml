@@ -1,0 +1,55 @@
+name: Cross-repo sync
+
+# Verifies the shared contracts (RiskOracle interface, warning-tier
+# thresholds) against the current state of grydlock-research and
+# grydlock-extension. Runs weekly because drift originates in those repos,
+# not in pushes to this one; also runs on PRs that touch a contract surface,
+# and on demand via workflow_dispatch.
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/RiskOracle.ts'
+      - 'README.md'
+      - 'scripts/check-cross-repo-sync.mjs'
+      - '.github/workflows/cross-repo-sync.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/check-cross-repo-sync.mjs
+
+      # A red run on a weekly schedule is easy to miss, so confirmed drift
+      # also opens (or updates) a tracking issue with the report.
+      - name: Open or update drift tracking issue
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f drift-report.md ]; then
+            echo "No drift-report.md — the check failed to fetch/parse rather than finding drift; see the job log."
+            exit 0
+          fi
+          gh label create cross-repo-drift \
+            --description "Shared contract drift detected by the weekly sync check" \
+            --color D93F0B --force
+          existing=$(gh issue list --label cross-repo-drift --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file drift-report.md
+          else
+            gh issue create \
+              --title "Cross-repo contract drift detected by scheduled sync check" \
+              --label cross-repo-drift \
+              --body-file drift-report.md
+          fi

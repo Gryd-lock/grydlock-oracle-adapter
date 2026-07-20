@@ -1,5 +1,7 @@
 node_modules/
 dist/
+docs/
 coverage/
 *.log
 .DS_Store
+drift-report.md

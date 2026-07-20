@@ -4,6 +4,7 @@
 [![Soroban Smart Contracts](https://img.shields.io/badge/Smart%20Contracts-Soroban-purple)](https://soroban.stellar.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Status: In Development](https://img.shields.io/badge/status-in%20development-yellow)](#roadmap)
+[![API Reference](https://img.shields.io/badge/docs-API%20reference-blue)](https://gryd-lock.github.io/grydlock-oracle-adapter/)
 
 Read-client that fetches a 0–100 risk score for a Stellar address or asset from an on-chain risk oracle, and exposes it to the Gryd Lock extension behind a stable interface.
 
@@ -29,12 +30,31 @@ At a high level, it does one thing, deliberately narrowly scoped:
 - **🔌 Adapts** — normalizes the oracle response behind a single, stable `RiskOracle` interface so the scoring backend can be swapped without touching the extension
 - **📤 Exposes** — returns a plain 0–100 score to the Gryd Lock extension, with no chain-specific types leaking across the boundary
 
+## Documentation
+
+Full API reference is generated from the source JSDoc with [TypeDoc](https://typedoc.org/) and
+published to GitHub Pages on every push to `main`:
+
+**📖 [gryd-lock.github.io/grydlock-oracle-adapter](https://gryd-lock.github.io/grydlock-oracle-adapter/)**
+
+To build the reference locally:
+
+```bash
+npm run docs        # generate the HTML reference into docs/
+npm run docs:check  # validate JSDoc coverage without emitting files (used in CI)
+```
+
+`docs:check` fails if any exported symbol is missing a doc comment, so the published reference
+stays complete as the public surface grows.
+
 ## Features
 
 - **`RiskOracle` interface** — one method, `getScore(destination)`, that both implementations satisfy
 - **`StubOracle`** — lookup-table score source backed by vendored `grydlock-testkit` fixtures, for local development and the `grydlock-testkit` evaluation; no network calls
+- **`ProvenanceOracle`** — wraps any `RiskOracle` and emits a structured provenance record (source, timestamp, cache status, latency) for every score, via an injectable `Logger`
+- **`Logger` interface** — minimal structured logging seam (`debug`/`info`/`warn`/`error`) with a no-op default; the library never writes to the console on its own
 - **`SorobanOracle`** _(planned)_ — calls `get_score()` on the live on-chain risk oracle contract and returns the result
-- **Caching and fallback** _(planned)_ — a slow or unreachable oracle degrades gracefully instead of stalling the signing flow
+- **Fallback** _(planned)_ — a slow or unreachable oracle degrades gracefully instead of stalling the signing flow
 
 <!-- TODO: expand this list as real implementation features land -->
 
@@ -64,11 +84,13 @@ graph TB
 
 ### Core Components
 
-| Component              | Role                                                                      | Status              |
-| ---------------------- | ------------------------------------------------------------------------- | ------------------- |
-| `src/RiskOracle.ts`    | Defines the `getScore(destination)` contract                              | Implemented         |
-| `src/StubOracle.ts`    | Lookup-table score source, backed by vendored `grydlock-testkit` fixtures | Implemented, tested |
-| `src/SorobanOracle.ts` | Live client against the on-chain oracle contract                          | Not started         |
+| Component                 | Role                                                                               | Status              |
+| ------------------------- | ---------------------------------------------------------------------------------- | ------------------- |
+| `src/RiskOracle.ts`       | Defines the `getScore(destination)` contract and the `ScoredResult` metadata types | Implemented         |
+| `src/StubOracle.ts`       | Lookup-table score source, backed by vendored `grydlock-testkit` fixtures          | Implemented, tested |
+| `src/ProvenanceOracle.ts` | Decorator that logs a structured provenance record for every score                 | Implemented, tested |
+| `src/Logger.ts`           | Injectable structured `Logger` interface with a no-op default                      | Implemented         |
+| `src/SorobanOracle.ts`    | Live client against the on-chain oracle contract                                   | Not started         |
 
 `src/fixtures/testkit/` is a vendored, point-in-time copy of `grydlock-testkit`'s
 `destinations.json` and `scores.json` — not a live sync. If the testkit fixtures change, re-copy
@@ -107,6 +129,66 @@ The extension depends on this shape and nothing beneath it. Two implementations 
 - **StubOracle** — returns a score from the vendored `grydlock-testkit` fixture lookup table (falling back to a default for unrecognized destinations). Used for development and for the `grydlock-testkit` evaluation. No network.
 - **SorobanOracle** — calls `get_score()` on the live on-chain risk oracle contract and returns the result. Wired in a later phase.
 
+### Score provenance and metadata
+
+Alongside the bare-number contract, the interface file defines an opt-in metadata shape
+(issue #17's design) so richer sources — fallback chains, caches — can report how a score
+was produced without breaking `getScore` consumers:
+
+```ts
+interface ScoredResult {
+  score: number; // 0–100
+  timestamp: number; // epoch ms when the score was produced
+  source: OracleSource; // which oracle/tier answered, e.g. "StubOracle", "soroban"
+  cacheStatus: CacheStatus; // "live" | "cache-fresh" | "cache-stale" | "default" | "unknown"
+  confidence?: number;
+}
+
+interface DetailedRiskOracle extends RiskOracle {
+  getScoreDetailed(destination: string): Promise<ScoredResult>;
+}
+```
+
+`ProvenanceOracle` is a decorator that wraps any `RiskOracle` and emits one structured
+provenance record per call through an injected `Logger` — callers keep calling
+`getScore(dest)` exactly as before:
+
+```ts
+const oracle = new ProvenanceOracle(new StubOracle(), { logger: myLogger });
+const score = await oracle.getScore(dest); // same number as before
+
+// myLogger.info('score_provenance', {
+//   event: 'score_provenance',
+//   destination: 'G...',
+//   score: 95,
+//   source: 'StubOracle',
+//   cacheStatus: 'unknown',
+//   timestamp: 1752762896000,
+//   latencyMs: 1,
+//   outcome: 'success',
+// })
+```
+
+If the wrapped oracle implements `getScoreDetailed`, its reported source and cache status
+flow into the record; otherwise the record uses the wrapper's configured source label and an
+`"unknown"` cache status. Failed calls are rethrown unchanged and logged at `error` level
+with `outcome: 'error'`.
+
+### Debugging an unexpected score in production
+
+The provenance log is the recommended way to answer "why did the user see this score."
+Wire a real `Logger` into `ProvenanceOracle` (routing to the extension's own logging), then
+filter for `score_provenance` entries for the destination in question. Each entry tells you:
+
+- **`source`** — which oracle/tier actually answered (live contract, cache, stub, default)
+- **`cacheStatus`** — whether the value was live, fresh-from-cache, stale, or a fallback default
+- **`timestamp` / `latencyMs`** — when the call completed and how long it took
+- **`outcome` / `error`** — whether the underlying source failed and why
+
+A disputed Critical-tier warning that traces to `source: "StubOracle"` or
+`cacheStatus: "cache-stale"` is a very different bug than one backed by a live on-chain read —
+the provenance record makes that distinction visible after the fact.
+
 ## How the Extension Uses It
 
 ```ts
@@ -130,11 +212,16 @@ grydlock-oracle-adapter/
 ├── commitlint.config.js              ← Conventional-commits lint rules
 │
 ├── .husky/commit-msg                 ← Local commit-msg hook, runs commitlint
-├── .github/workflows/ci.yml          ← CI: typecheck, lint, format check, test, build, commitlint
+├── .github/workflows/ci.yml          ← CI: typecheck, lint, format check, test, build, bundle size, commitlint
+│
+├── scripts/
+│   └── bundle-size.mjs               ← esbuild-based bundle-size budget + tree-shaking check
 │
 ├── src/
-│   ├── RiskOracle.ts                  ← Interface definition
+│   ├── RiskOracle.ts                  ← Interface definition + ScoredResult metadata types
 │   ├── StubOracle.ts                  ← Lookup-table implementation, backed by fixtures/
+│   ├── ProvenanceOracle.ts            ← Decorator emitting a provenance record per score
+│   ├── Logger.ts                      ← Injectable structured Logger interface, no-op default
 │   ├── SorobanOracle.ts               ← Live oracle client (planned, not yet in src/)
 │   ├── fixtures/testkit/
 │   │   ├── destinations.json          ← Vendored grydlock-testkit fixture (labelled destinations)
@@ -145,7 +232,7 @@ grydlock-oracle-adapter/
 │
 └── tests/
     ├── StubOracle.test.ts             ← getScore range + label-ordering tests against the fixtures
-    └── fixtureSchema.test.ts          ← Asserts malformed fixtures are rejected with a clear error
+    └── ProvenanceOracle.test.ts       ← provenance record shape, pass-through, and error-path tests
 ```
 
 ## Quick Start
@@ -157,6 +244,7 @@ npm test           # run the test suite
 npm run typecheck  # tsc --noEmit
 npm run lint       # eslint .
 npm run format     # prettier --write .
+npm run size       # bundle-size budget + tree-shaking check
 ```
 
 ```ts
@@ -183,6 +271,40 @@ Covers:
 
 - `StubOracle.getScore` returns a number within 0–100 for every destination in the vendored `grydlock-testkit` fixtures, and a default score for unrecognized destinations
 - Fixture destinations labelled `malicious` score higher than those labelled `clean`
+- `ProvenanceOracle` passes scores through unchanged, emits one structured provenance record per `getScore`/`getScoreDetailed` call (source, timestamp, cache status, latency), reflects metadata from `DetailedRiskOracle` inners, and logs an `error` outcome when the wrapped oracle throws
+
+## Bundle Size & Tree-Shaking
+
+Because this package ships inside a browser extension (`grydlock-extension`), its footprint
+directly affects extension load time and web-store review. CI enforces both a size budget and
+tree-shaking behavior on every PR:
+
+```bash
+npm run size
+```
+
+The check (`scripts/bundle-size.mjs`) bundles the package with esbuild (minified ESM, from the
+TypeScript source — the same consumption path the extension's bundler will use once the ESM
+build output from #37 lands) for representative import patterns:
+
+| Import pattern                   | Current size (minified) | Budget |
+| -------------------------------- | ----------------------- | ------ |
+| `import { StubOracle }` only     | ~0.8 KB (~0.6 KB gzip)  | 5 KB   |
+| Full barrel (`export * from ..`) | ~0.8 KB (~0.6 KB gzip)  | 10 KB  |
+
+Two things fail CI:
+
+- **Budget regression** — a pattern's minified size exceeds its budget. If the growth is
+  intentional (a real feature), raise the budget in `scripts/bundle-size.mjs` in the same PR
+  and call it out in the PR description.
+- **Tree-shaking leak** — the `StubOracle`-only pattern bundles any module outside its
+  explicit allowlist (`StubOracle`, the `RiskOracle` types, and the score fixtures). This
+  guarantees that importing only `StubOracle` never drags in `SorobanOracle`, aggregation, or
+  other future code; when new modules are added to the barrel, they must be tree-shakeable
+  (no module-level side effects) or the check fails.
+
+**For extension-side contributors:** the "StubOracle only" row is the integration cost of the
+current recommended usage — under 1 KB gzipped added to the extension bundle.
 
 ## Roadmap
 
@@ -321,12 +443,39 @@ how loudly to warn:
 | 51–75  | High     | Strong warning, require confirm |
 | 76–100 | Critical | Recommend abort                 |
 
+### Verifying cross-repo sync (canonical method)
+
+Don't verify the shared contracts above by reading READMEs across repos — that's exactly the
+manual process that lets drift slip through. The canonical way to check sync is:
+
+```bash
+npm run sync:check
+```
+
+`scripts/check-cross-repo-sync.mjs` fetches the current state of the contracts from the other
+public repos and diffs them against this repo:
+
+- **Warning tiers** — parses the canonical table in `grydlock-research`'s README and compares
+  it against both `grydlock-extension`'s implementation (`src/lib/tiers.ts`) and this repo's
+  own README table
+- **`RiskOracle.getScore`** — compares the signature in `src/RiskOracle.ts` against the
+  stand-in the extension declares in `src/adapter/oracleAdapter.ts`
+
+On drift it prints a PASS/FAIL report with the expected (canonical) vs actual values, writes
+`drift-report.md`, and exits non-zero. CI runs it weekly (Mondays 06:00 UTC, plus on PRs that
+touch a contract surface — see `.github/workflows/cross-repo-sync.yml`), since drift
+originates in the other repos rather than in pushes here; a scheduled run that finds drift
+automatically opens (or updates) a tracking issue labelled `cross-repo-drift`. A fetch or
+parse failure exits with a distinct code (2) and is reported as "needs a human look", not as
+confirmed drift.
+
 ### Conventions for AI Agents
 
 - Treat this section as the source of truth for **cross-repo** context. Each repo's own README
   covers repo-local conventions.
 - Before assuming a name/function/interface still exists in another repo, verify it there — this
-  reflects each repo's state as of the last time it was checked, not a live feed.
+  reflects each repo's state as of the last time it was checked, not a live feed. For the two
+  shared contracts above, run `npm run sync:check` instead of eyeballing.
 - If a change here affects `RiskOracle` or the warning-tier thresholds, call it out so the
   corresponding repo can be updated.
 
