@@ -4,6 +4,7 @@
 [![Soroban Smart Contracts](https://img.shields.io/badge/Smart%20Contracts-Soroban-purple)](https://soroban.stellar.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Status: In Development](https://img.shields.io/badge/status-in%20development-yellow)](#roadmap)
+[![API Reference](https://img.shields.io/badge/docs-API%20reference-blue)](https://gryd-lock.github.io/grydlock-oracle-adapter/)
 
 Read-client that fetches a 0–100 risk score for a Stellar address or asset from an on-chain risk oracle, and exposes it to the Gryd Lock extension behind a stable interface.
 
@@ -29,10 +30,29 @@ At a high level, it does one thing, deliberately narrowly scoped:
 - **🔌 Adapts** — normalizes the oracle response behind a single, stable `RiskOracle` interface so the scoring backend can be swapped without touching the extension
 - **📤 Exposes** — returns a plain 0–100 score to the Gryd Lock extension, with no chain-specific types leaking across the boundary
 
+## Documentation
+
+Full API reference is generated from the source JSDoc with [TypeDoc](https://typedoc.org/) and
+published to GitHub Pages on every push to `main`:
+
+**📖 [gryd-lock.github.io/grydlock-oracle-adapter](https://gryd-lock.github.io/grydlock-oracle-adapter/)**
+
+To build the reference locally:
+
+```bash
+npm run docs        # generate the HTML reference into docs/
+npm run docs:check  # validate JSDoc coverage without emitting files (used in CI)
+```
+
+`docs:check` fails if any exported symbol is missing a doc comment, so the published reference
+stays complete as the public surface grows.
+
 ## Features
 
 - **`RiskOracle` interface** — one method, `getScore(destination)`, that both implementations satisfy
 - **`StubOracle`** — lookup-table score source backed by vendored `grydlock-testkit` fixtures, for local development and the `grydlock-testkit` evaluation; no network calls
+- **`ProvenanceOracle`** — wraps any `RiskOracle` and emits a structured provenance record (source, timestamp, cache status, latency) for every score, via an injectable `Logger`
+- **`Logger` interface** — minimal structured logging seam (`debug`/`info`/`warn`/`error`) with a no-op default; the library never writes to the console on its own
 - **`SorobanOracle`** _(planned)_ — calls `get_score()` on the live on-chain risk oracle contract and returns the result
 - **Caching and fallback** _(planned)_ — a slow or unreachable oracle degrades gracefully instead of stalling the signing flow
 
@@ -64,11 +84,13 @@ graph TB
 
 ### Core Components
 
-| Component              | Role                                                                      | Status              |
-| ---------------------- | ------------------------------------------------------------------------- | ------------------- |
-| `src/RiskOracle.ts`    | Defines the `getScore(destination)` contract                              | Implemented         |
-| `src/StubOracle.ts`    | Lookup-table score source, backed by vendored `grydlock-testkit` fixtures | Implemented, tested |
-| `src/SorobanOracle.ts` | Live client against the on-chain oracle contract                          | Not started         |
+| Component                 | Role                                                                               | Status              |
+| ------------------------- | ---------------------------------------------------------------------------------- | ------------------- |
+| `src/RiskOracle.ts`       | Defines the `getScore(destination)` contract and the `ScoredResult` metadata types | Implemented         |
+| `src/StubOracle.ts`       | Lookup-table score source, backed by vendored `grydlock-testkit` fixtures          | Implemented, tested |
+| `src/ProvenanceOracle.ts` | Decorator that logs a structured provenance record for every score                 | Implemented, tested |
+| `src/Logger.ts`           | Injectable structured `Logger` interface with a no-op default                      | Implemented         |
+| `src/SorobanOracle.ts`    | Live client against the on-chain oracle contract                                   | Not started         |
 
 `src/fixtures/testkit/` is a vendored, point-in-time copy of `grydlock-testkit`'s
 `destinations.json` and `scores.json` — not a live sync. If the testkit fixtures change, re-copy
@@ -90,6 +112,66 @@ The extension depends on this shape and nothing beneath it. Two implementations 
 
 - **StubOracle** — returns a score from the vendored `grydlock-testkit` fixture lookup table (falling back to a default for unrecognized destinations). Used for development and for the `grydlock-testkit` evaluation. No network.
 - **SorobanOracle** — calls `get_score()` on the live on-chain risk oracle contract and returns the result. Wired in a later phase.
+
+### Score provenance and metadata
+
+Alongside the bare-number contract, the interface file defines an opt-in metadata shape
+(issue #17's design) so richer sources — fallback chains, caches — can report how a score
+was produced without breaking `getScore` consumers:
+
+```ts
+interface ScoredResult {
+  score: number; // 0–100
+  timestamp: number; // epoch ms when the score was produced
+  source: OracleSource; // which oracle/tier answered, e.g. "StubOracle", "soroban"
+  cacheStatus: CacheStatus; // "live" | "cache-fresh" | "cache-stale" | "default" | "unknown"
+  confidence?: number;
+}
+
+interface DetailedRiskOracle extends RiskOracle {
+  getScoreDetailed(destination: string): Promise<ScoredResult>;
+}
+```
+
+`ProvenanceOracle` is a decorator that wraps any `RiskOracle` and emits one structured
+provenance record per call through an injected `Logger` — callers keep calling
+`getScore(dest)` exactly as before:
+
+```ts
+const oracle = new ProvenanceOracle(new StubOracle(), { logger: myLogger });
+const score = await oracle.getScore(dest); // same number as before
+
+// myLogger.info('score_provenance', {
+//   event: 'score_provenance',
+//   destination: 'G...',
+//   score: 95,
+//   source: 'StubOracle',
+//   cacheStatus: 'unknown',
+//   timestamp: 1752762896000,
+//   latencyMs: 1,
+//   outcome: 'success',
+// })
+```
+
+If the wrapped oracle implements `getScoreDetailed`, its reported source and cache status
+flow into the record; otherwise the record uses the wrapper's configured source label and an
+`"unknown"` cache status. Failed calls are rethrown unchanged and logged at `error` level
+with `outcome: 'error'`.
+
+### Debugging an unexpected score in production
+
+The provenance log is the recommended way to answer "why did the user see this score."
+Wire a real `Logger` into `ProvenanceOracle` (routing to the extension's own logging), then
+filter for `score_provenance` entries for the destination in question. Each entry tells you:
+
+- **`source`** — which oracle/tier actually answered (live contract, cache, stub, default)
+- **`cacheStatus`** — whether the value was live, fresh-from-cache, stale, or a fallback default
+- **`timestamp` / `latencyMs`** — when the call completed and how long it took
+- **`outcome` / `error`** — whether the underlying source failed and why
+
+A disputed Critical-tier warning that traces to `source: "StubOracle"` or
+`cacheStatus: "cache-stale"` is a very different bug than one backed by a live on-chain read —
+the provenance record makes that distinction visible after the fact.
 
 ## How the Extension Uses It
 
@@ -120,14 +202,17 @@ grydlock-oracle-adapter/
 │   └── bundle-size.mjs               ← esbuild-based bundle-size budget + tree-shaking check
 │
 ├── src/
-│   ├── RiskOracle.ts                  ← Interface definition
+│   ├── RiskOracle.ts                  ← Interface definition + ScoredResult metadata types
 │   ├── StubOracle.ts                  ← Lookup-table implementation, backed by fixtures/
+│   ├── ProvenanceOracle.ts            ← Decorator emitting a provenance record per score
+│   ├── Logger.ts                      ← Injectable structured Logger interface, no-op default
 │   ├── SorobanOracle.ts               ← Live oracle client (planned, not yet in src/)
 │   ├── fixtures/testkit/              ← Vendored grydlock-testkit fixtures (destinations.json, scores.json)
 │   └── index.ts                       ← Barrel export
 │
 └── tests/
-    └── StubOracle.test.ts             ← getScore range + label-ordering tests against the fixtures
+    ├── StubOracle.test.ts             ← getScore range + label-ordering tests against the fixtures
+    └── ProvenanceOracle.test.ts       ← provenance record shape, pass-through, and error-path tests
 ```
 
 ## Quick Start
@@ -166,6 +251,7 @@ Covers:
 
 - `StubOracle.getScore` returns a number within 0–100 for every destination in the vendored `grydlock-testkit` fixtures, and a default score for unrecognized destinations
 - Fixture destinations labelled `malicious` score higher than those labelled `clean`
+- `ProvenanceOracle` passes scores through unchanged, emits one structured provenance record per `getScore`/`getScoreDetailed` call (source, timestamp, cache status, latency), reflects metadata from `DetailedRiskOracle` inners, and logs an `error` outcome when the wrapped oracle throws
 
 ## Bundle Size & Tree-Shaking
 
