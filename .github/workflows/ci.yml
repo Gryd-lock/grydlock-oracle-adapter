@@ -4,8 +4,6 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches: [main, "gf-**"]
   pull_request:
 
 jobs:
