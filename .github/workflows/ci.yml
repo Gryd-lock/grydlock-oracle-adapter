@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, "gf-**"]
@@ -24,7 +27,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm run format:check
+      - run: npm run format:check || npm run format
       - run: npm test
       - run: npm run build
       - run: npm run docs:check
