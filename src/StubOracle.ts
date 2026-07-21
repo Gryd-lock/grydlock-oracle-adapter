@@ -1,3 +1,5 @@
+import { StrKey } from '@stellar/stellar-sdk';
+import { InvalidDestinationError } from './OracleError';
 import { RiskOracle } from './RiskOracle';
 import { scores } from './fixtures/testkit';
 
