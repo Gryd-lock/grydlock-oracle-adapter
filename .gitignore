@@ -1,5 +1,9 @@
 node_modules/
 dist/
+docs/
 coverage/
+reports/
+.stryker-tmp/
 *.log
 .DS_Store
+drift-report.md

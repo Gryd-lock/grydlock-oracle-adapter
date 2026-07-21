@@ -1,7 +1,7 @@
 import { InvalidDestinationError } from '../src/OracleError';
 import { describe, expect, it } from 'vitest';
 import { StubOracle } from '../src/StubOracle';
-import testkitDestinations from '../src/fixtures/testkit/destinations.json';
+import { destinations as testkitDestinations } from '../src/fixtures/testkit';
 
 describe('StubOracle', () => {
   it('returns a score within 0-100 for every grydlock-testkit fixture destination', async () => {
