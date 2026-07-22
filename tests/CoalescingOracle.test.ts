@@ -37,12 +37,18 @@ class ControlledOracle implements RiskOracle {
   resolve(destination: string, value: number) {
     const entry = this.resolvers.get(destination);
     if (!entry) throw new Error(`No in-flight promise for destination: ${destination}`);
+    // Forget the entry once settled: a real oracle wouldn't replay a past
+    // result for a call it hasn't been asked yet, and without this a later
+    // "retry" getScore() call would incorrectly hand back this same
+    // already-settled promise instead of starting a fresh one.
+    this.resolvers.delete(destination);
     entry.resolve(value);
   }
 
   reject(destination: string, error: unknown) {
     const entry = this.resolvers.get(destination);
     if (!entry) throw new Error(`No in-flight promise for destination: ${destination}`);
+    this.resolvers.delete(destination);
     entry.reject(error);
   }
 }
@@ -118,4 +124,3 @@ describe('CoalescingOracle', () => {
     await expect(p2).resolves.toBe(99);
   });
 });
-
