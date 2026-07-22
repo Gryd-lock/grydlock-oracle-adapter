@@ -401,8 +401,8 @@ the main `ci.yml` pipeline.
 ## Dependencies
 
 - TypeScript ^6.0.3, Vitest ^4.1.10, ESLint ^10.6.0 + typescript-eslint ^8.63.0, Prettier ^3.9.4 — see `package.json` for the full, pinned list
-- `soroban-client` / Soroban SDK — _planned, for `SorobanOracle`_
-- Stellar SDK (JS) — _planned, for `SorobanOracle`_
+- `@stellar/stellar-sdk` — currently only used by `tests/StrKeyCodec.differential.test.ts` as a reference oracle to fuzz-test `src/StrKeyCodec.ts` against; not imported anywhere in `src/` (destination validation is a from-scratch, dependency-free reimplementation — see that file's doc comment). Will become load-bearing once `SorobanOracle` is implemented.
+- `package.json`'s `overrides.axios` pins `axios` to `^1.18.1`: `@stellar/stellar-sdk` (every release from 15.0.1 through the current 16.0.1) pins an exact, older `axios` version that falls in several since-patched advisories' vulnerable ranges (all fixed in `axios@1.18.0`). Since nothing in `src/` calls into the SDK's HTTP layer yet, overriding carries no runtime risk today; remove this override once the SDK bumps its own `axios` pin upstream.
 
 ## License
 

@@ -49,5 +49,8 @@
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.0.1"
+  },
+  "overrides": {
+    "axios": "^1.18.1"
   }
 }
