@@ -28,24 +28,25 @@ export class CoalescingOracle implements RiskOracle {
     this.inFlightByDestination.set(destination, p);
 
     // Ensure the entry is removed after success or failure so a later call
-    // can retry. Cleanup is a single `.then(onSuccess, onFailure)` reaction
-    // directly on `p` — not `.finally()` chained into a separate `.catch()`.
-    // `.finally()` plus a trailing `.catch()` takes two microtask hops after
-    // `p` settles; a caller that awaits the rejection and immediately
-    // retries can resolve in fewer hops than that (vitest's own
-    // `rejects.toBe` matcher does), observing the stale map entry before
-    // this chain got to it. A single `.then()` here — registered before `p`
-    // settles, so it is queued ahead of anything a caller registers
-    // afterwards — clears the entry in one hop, and never rethrows, so it
-    // can't become an unhandled rejection either. The original `p` returned
-    // below is untouched, so callers still see the real result/rejection.
-    p.then(
-      () => this.clearInFlight(destination, p),
-      (err: unknown) => {
-        this.clearInFlight(destination, p);
-        this.logger.warn('CoalescingOracle.innerFailed', { destination, err });
-      },
-    );
+    // can retry.
+    p.finally(() => {
+      // Only delete if it's still the same promise instance.
+      if (this.inFlightByDestination.get(destination) === p) {
+        this.inFlightByDestination.delete(destination);
+        this.logger.debug('CoalescingOracle.inFlightEnd', { destination });
+      }
+    }).catch(() => {
+      // `finally` passes a rejection straight through, so this bookkeeping
+      // chain mirrors p's rejection. Callers receive `p` itself and own its
+      // rejection; swallow it here so it is not reported as an unhandled one.
+    });
+
+    p.catch((err) => {
+      // Log the failure without rethrowing: the derived promise is discarded,
+      // so rethrowing here would surface as an unhandled rejection while
+      // changing nothing for the caller awaiting `p`.
+      this.logger.warn('CoalescingOracle.innerFailed', { destination, err });
+    });
 
     return p;
   }

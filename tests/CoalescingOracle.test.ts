@@ -37,10 +37,8 @@ class ControlledOracle implements RiskOracle {
   resolve(destination: string, value: number) {
     const entry = this.resolvers.get(destination);
     if (!entry) throw new Error(`No in-flight promise for destination: ${destination}`);
-    // Forget the entry once settled: a real oracle wouldn't replay a past
-    // result for a call it hasn't been asked yet, and without this a later
-    // "retry" getScore() call would incorrectly hand back this same
-    // already-settled promise instead of starting a fresh one.
+    // Clear the entry so a subsequent getScore for this destination gets a
+    // fresh promise rather than this already-settled one.
     this.resolvers.delete(destination);
     entry.resolve(value);
   }

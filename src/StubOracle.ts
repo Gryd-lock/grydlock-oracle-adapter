@@ -1,3 +1,4 @@
+import { validateDestination } from './DestinationValidator';
 import { RiskOracle } from './RiskOracle';
 import { scores } from './fixtures/testkit';
 
@@ -17,12 +18,17 @@ export class StubOracle implements RiskOracle {
   /**
    * Looks the destination up in the vendored `grydlock-testkit` fixture scores.
    *
-   * @param destination A Stellar address or asset identifier.
+   * @param destination A Stellar address or asset identifier, validated by
+   * {@link validateDestination} before the lookup. Muxed (`M...`) destinations
+   * are looked up under their base `G` account.
    * @returns The fixture score for `destination`, or a default low-risk score
    * of `0` when the destination is not present in the fixtures (so the
    * extension always has a number to render).
+   * @throws {InvalidDestinationError} If `destination` is malformed.
    */
   async getScore(destination: string): Promise<number> {
-    return scores[destination] ?? DEFAULT_SCORE;
+    const { canonical } = validateDestination(destination);
+
+    return scores[canonical] ?? DEFAULT_SCORE;
   }
 }

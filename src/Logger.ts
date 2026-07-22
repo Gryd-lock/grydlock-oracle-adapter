@@ -12,13 +12,13 @@ export type LogFields = Record<string, unknown>;
  * entirely opt-in and nothing in this package writes to the console.
  */
 export interface Logger {
-  /** Low-level diagnostic detail, e.g. cache/coalescing internals. */
+  /** Logs a diagnostic message, most verbose level. */
   debug(message: string, fields?: LogFields): void;
-  /** Normal operational events, e.g. a resolved score's provenance. */
+  /** Logs an informational message. */
   info(message: string, fields?: LogFields): void;
-  /** Recoverable problems, e.g. a fallback tier being used. */
+  /** Logs a warning about a recoverable or unexpected condition. */
   warn(message: string, fields?: LogFields): void;
-  /** Failures, e.g. a score request that ultimately failed. */
+  /** Logs an error. */
   error(message: string, fields?: LogFields): void;
 }
 

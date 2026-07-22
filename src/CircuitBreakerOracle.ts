@@ -13,16 +13,11 @@ export interface CircuitBreakerConfig {
   isInfrastructureError?: (error: unknown) => boolean;
 }
 
-function stringProp(error: unknown, key: 'message' | 'name'): string {
-  if (typeof error !== 'object' || error === null) return '';
-  const value = (error as Record<string, unknown>)[key];
-  return typeof value === 'string' ? value : '';
-}
-
 export function defaultIsInfrastructureError(error: unknown): boolean {
-  if (!error) return false;
-  const msg = stringProp(error, 'message').toLowerCase();
-  const name = stringProp(error, 'name').toLowerCase();
+  if (!error || typeof error !== 'object') return false;
+  const { message, name: errorName } = error as { message?: string; name?: string };
+  const msg = (message || '').toLowerCase();
+  const name = (errorName || '').toLowerCase();
   return (
     msg.includes('network') ||
     msg.includes('timeout') ||
