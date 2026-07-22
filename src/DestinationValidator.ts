@@ -34,6 +34,7 @@ export type AssetCodeType = 'alphanum4' | 'alphanum12';
 /** A destination that passed validation, decomposed into its parts. */
 export type ValidatedDestination =
   | {
+      /** Discriminant: a classic `G` account address. */
       kind: 'account';
       /** The form used for fixture lookup. */
       canonical: string;
@@ -41,6 +42,7 @@ export type ValidatedDestination =
       address: string;
     }
   | {
+      /** Discriminant: a SEP-23 muxed `M` account. */
       kind: 'muxedAccount';
       /** The base `G` address the muxed account resolves to. */
       canonical: string;
@@ -52,17 +54,25 @@ export type ValidatedDestination =
       subaccountId: bigint;
     }
   | {
+      /** Discriminant: a Soroban `C` contract address. */
       kind: 'contract';
+      /** The form used for fixture lookup. */
       canonical: string;
+      /** The `C` address as supplied. */
       address: string;
     }
   | {
+      /** Discriminant: an `L` liquidity pool identifier. */
       kind: 'liquidityPool';
+      /** The form used for fixture lookup. */
       canonical: string;
+      /** The `L` identifier as supplied. */
       address: string;
     }
   | {
+      /** Discriminant: a SEP-11 `<asset_code>:<issuer>` composite. */
       kind: 'asset';
+      /** The form used for fixture lookup. */
       canonical: string;
       /** The asset code exactly as supplied; case is significant. */
       assetCode: string;
