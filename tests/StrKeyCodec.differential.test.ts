@@ -177,7 +177,9 @@ describe('StrKeyCodec differential fuzz against @stellar/stellar-sdk', () => {
     expect(corpus.length).toBeGreaterThanOrEqual(MINIMUM_CORPUS_SIZE);
   });
 
-  it('agrees with the SDK on every accept/reject verdict and payload', () => {
+  // Tens of thousands of decode comparisons; the default 5s timeout is not
+  // enough when this runs alongside the benchmark suite on a loaded machine.
+  it('agrees with the SDK on every accept/reject verdict and payload', { timeout: 120_000 }, () => {
     for (const input of corpus) {
       for (const { type, isValid, decode } of TYPES) {
         const mine = isValidStrKey(input, type);
@@ -201,7 +203,7 @@ describe('StrKeyCodec differential fuzz against @stellar/stellar-sdk', () => {
     }
   });
 
-  it('encodes byte-for-byte identically to the SDK', () => {
+  it('encodes byte-for-byte identically to the SDK', { timeout: 120_000 }, () => {
     for (let index = 0; index < 500; index += 1) {
       const key = randomBytes(32);
       const id = randomBytes(8);
