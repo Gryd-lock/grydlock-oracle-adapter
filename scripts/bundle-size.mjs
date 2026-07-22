@@ -42,6 +42,8 @@ const CHECKS = [
       'src/StrKeyCodec.ts',
       'src/OracleError.ts',
       'src/fixtures/testkit/scores.json',
+      'src/fixtures/testkit/scores.ts',
+      'src/fixtures/testkit/schema.ts',
     ],
   },
   {
