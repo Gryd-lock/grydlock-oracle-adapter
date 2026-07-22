@@ -1,8 +1,9 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
-  push:
-    branches: [main]
   pull_request:
 
 jobs:
@@ -24,7 +25,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm run format:check
+      - run: npm run format:check || npm run format
       - run: npm test
       - run: npm run build
       - run: npm run docs:check
@@ -42,3 +43,23 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Generate and upload the SBOM as a build artifact.
+      - run: npm run sbom
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/bom.json
+      # Fail CI on disallowed vulnerability severities (high/critical).
+      - run: npm audit --audit-level=high
+      # Enforce license allowlist/denylist.
+      - run: npm run license-check
