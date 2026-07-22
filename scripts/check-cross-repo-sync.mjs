@@ -1,4 +1,4 @@
-/* global console, process, fetch */
+/* global console, process, fetch, URL */
 /**
  * Cross-repo compatibility verification (issue #45).
  *
