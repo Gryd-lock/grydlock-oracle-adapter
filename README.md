@@ -129,6 +129,33 @@ The extension depends on this shape and nothing beneath it. Two implementations 
 - **StubOracle** — returns a score from the vendored `grydlock-testkit` fixture lookup table (falling back to a default for unrecognized destinations). Used for development and for the `grydlock-testkit` evaluation. No network.
 - **SorobanOracle** — calls `get_score()` on the live on-chain risk oracle contract and returns the result. Wired in a later phase.
 
+### Destination validation
+
+Every `destination` is validated and canonicalized before any score lookup, so a malformed or
+forged identifier surfaces as an `InvalidDestinationError` rather than silently scoring as the
+default. The grammar is:
+
+| Shape                    | Example                 | Decision                                 |
+| ------------------------ | ----------------------- | ---------------------------------------- |
+| `G…` ed25519 account     | `GCRRYBV5…`             | Accepted as-is                           |
+| `M…` muxed account       | `MCRRYBV5…`             | Accepted, scored as its base `G` account |
+| `C…` contract address    | `CADQOBYH…`             | Accepted as-is                           |
+| `L…` liquidity pool      | `LAEQSCIJ…`             | Accepted as-is                           |
+| `<code>:<issuer>` asset  | `SCAM:GAJLLIIP…`        | Accepted; SEP-11 code + `G` issuer       |
+| `S…` `T…` `X…` `P…` `B…` | —                       | Rejected: signer/transaction constructs  |
+| anything else            | `not-a-stellar-address` | Rejected                                 |
+
+A muxed address is the same underlying ed25519 account with a routing tag attached, so its
+on-chain risk is the base account's risk — rejecting it would leave a user paying a custodial
+exchange deposit address with no warning at all. The 64-bit subaccount id is still decoded and
+exposed on the validation result for future use.
+
+`src/StrKeyCodec.ts` implements base32, the CRC16-XModem checksum and version-byte/payload-length
+checks from the strkey specification rather than delegating to `@stellar/stellar-sdk`. The SDK's
+`StrKey` appears in exactly one file — `tests/StrKeyCodec.differential.test.ts` — where it is the
+ground-truth oracle for a 5,000+ input differential fuzz suite that asserts identical
+accept/reject verdicts and identical decoded payload bytes.
+
 ### Score provenance and metadata
 
 Alongside the bare-number contract, the interface file defines an opt-in metadata shape
@@ -221,6 +248,8 @@ grydlock-oracle-adapter/
 ├── src/
 │   ├── RiskOracle.ts                  ← Interface definition + ScoredResult metadata types
 │   ├── StubOracle.ts                  ← Lookup-table implementation, backed by fixtures/
+│   ├── StrKeyCodec.ts                 ← From-scratch Stellar strkey codec (base32 + CRC16-XModem)
+│   ├── DestinationValidator.ts        ← Destination grammar: G/M/C/L addresses + SEP-11 assets
 │   ├── ProvenanceOracle.ts            ← Decorator emitting a provenance record per score
 │   ├── Logger.ts                      ← Injectable structured Logger interface, no-op default
 │   ├── SorobanOracle.ts               ← Live oracle client (planned, not yet in src/)
@@ -233,6 +262,9 @@ grydlock-oracle-adapter/
 │
 └── tests/
     ├── StubOracle.test.ts             ← getScore range + label-ordering tests against the fixtures
+    ├── StrKeyCodec.test.ts            ← base32 / CRC16-XModem / version-byte unit tests
+    ├── StrKeyCodec.differential.test.ts ← 5k-input differential fuzz against the SDK's StrKey
+    ├── DestinationValidator.test.ts   ← destination grammar + SEP-11 asset-code boundary tests
     └── ProvenanceOracle.test.ts       ← provenance record shape, pass-through, and error-path tests
 ```
 
@@ -259,16 +291,10 @@ const logger: Logger = {
   error: (message, meta) => console.error(message, meta),
 };
 
-const oracle = new CoalescingOracle(
-  new StubOracle(logger),
-  logger,
-);
+const oracle = new CoalescingOracle(new StubOracle(logger), logger);
 
-const score = await oracle.getScore(
-  'GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET',
-); // 95, labelled "malicious" in grydlock-testkit
+const score = await oracle.getScore('GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET'); // 95, labelled "malicious" in grydlock-testkit
 ```
-
 
 ## Tech Stack
 
@@ -548,12 +574,12 @@ _Part of the Gryd Lock project. Interface defined, live oracle not yet wired._
 
 ## Oracle Error Types
 
-| Error | Code | Meaning | Typical Cause |
-|-------|------|---------|---------------|
-| OracleUnavailableError | ORACLE_UNAVAILABLE | The oracle could not be reached. | Network outage, RPC unavailable |
-| OracleTimeoutError | ORACLE_TIMEOUT | The oracle request timed out. | Slow network or unresponsive RPC |
-| InvalidDestinationError | INVALID_DESTINATION | The supplied Stellar destination is invalid. | Malformed address or asset identifier |
-| UnrecognizedDestinationError | UNRECOGNIZED_DESTINATION | The destination is valid but not recognized. | Destination not present in oracle data |
-| ContractIncompatibilityError | CONTRACT_INCOMPATIBILITY | The adapter is incompatible with the oracle contract. | ABI/version mismatch |
+| Error                        | Code                     | Meaning                                               | Typical Cause                          |
+| ---------------------------- | ------------------------ | ----------------------------------------------------- | -------------------------------------- |
+| OracleUnavailableError       | ORACLE_UNAVAILABLE       | The oracle could not be reached.                      | Network outage, RPC unavailable        |
+| OracleTimeoutError           | ORACLE_TIMEOUT           | The oracle request timed out.                         | Slow network or unresponsive RPC       |
+| InvalidDestinationError      | INVALID_DESTINATION      | The supplied Stellar destination is invalid.          | Malformed address or asset identifier  |
+| UnrecognizedDestinationError | UNRECOGNIZED_DESTINATION | The destination is valid but not recognized.          | Destination not present in oracle data |
+| ContractIncompatibilityError | CONTRACT_INCOMPATIBILITY | The adapter is incompatible with the oracle contract. | ABI/version mismatch                   |
 
 </div>
