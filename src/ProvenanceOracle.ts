@@ -13,6 +13,7 @@ import { Logger, noopLogger } from './Logger';
  * after the fact.
  */
 export interface ScoreProvenance {
+  /** Discriminant tag identifying this record shape in a log stream. */
   event: 'score_provenance';
   /** The Stellar address or asset that was scored. */
   destination: string;
@@ -26,11 +27,13 @@ export interface ScoreProvenance {
   timestamp: number;
   /** Wall-clock duration of the call in milliseconds. */
   latencyMs: number;
+  /** Whether the underlying call succeeded or threw. */
   outcome: 'success' | 'error';
   /** Present when outcome is "error": the stringified inner failure. */
   error?: string;
 }
 
+/** Options controlling a {@link ProvenanceOracle}. */
 export interface ProvenanceOracleOptions {
   /**
    * Label used as the provenance source when the wrapped oracle cannot
@@ -83,6 +86,11 @@ export class ProvenanceOracle implements DetailedRiskOracle {
     return result.score;
   }
 
+  /**
+   * @param destination A Stellar address or asset identifier.
+   * @returns The inner oracle's detailed result, after emitting a
+   * {@link ScoreProvenance} record for the call.
+   */
   async getScoreDetailed(destination: string): Promise<ScoredResult> {
     return this.resolveWithProvenance(destination);
   }
