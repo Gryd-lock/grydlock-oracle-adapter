@@ -72,14 +72,28 @@ function parseTierTable(markdown, label) {
 }
 
 /**
- * Parses grydlock-extension's src/lib/tiers.ts. The TIERS array lists
- * `max: <n>` and `tier: '<name>'` in matching order, so the two match lists
+ * Parses grydlock-extension's src/lib/tiers.ts. The `TIERS` array lists
+ * `max: <n>` and `tier: '<name>'` (currently nested under a `info: {...}`
+ * property, not flat — see below) in matching order, so the two match lists
  * are zipped by index; band minimums are derived from the previous band's
  * max (first band starts at 0).
+ *
+ * Parsing is scoped to just the `TIERS` array's own source (up to the next
+ * top-level `export`), not the whole file: the file also declares an
+ * `UNSCORED_TIER_INFO` sentinel (for the "oracle unreachable" UI state, not
+ * a real scored band) with its own `tier: 'unscored'` — scanning the whole
+ * file for every `tier: '...'` occurrence picks that up too, one more name
+ * than there are `max` entries to pair it with.
  */
 function parseExtensionTiers(source) {
-  const maxes = [...source.matchAll(/max:\s*(\d+)/g)].map((m) => Number(m[1]));
-  const names = [...source.matchAll(/tier:\s*'([a-z]+)'/g)].map((m) => m[1]);
+  const tiersArrayMatch = source.match(/const TIERS[\s\S]*?(?=\nexport )/);
+  if (!tiersArrayMatch) {
+    throw new Error('could not locate the TIERS array in extension tiers.ts');
+  }
+  const tiersSource = tiersArrayMatch[0];
+
+  const maxes = [...tiersSource.matchAll(/max:\s*(\d+)/g)].map((m) => Number(m[1]));
+  const names = [...tiersSource.matchAll(/tier:\s*'([a-z]+)'/g)].map((m) => m[1]);
   if (maxes.length === 0 || maxes.length !== names.length) {
     throw new Error(
       `could not pair max/tier entries in extension tiers.ts ` +
