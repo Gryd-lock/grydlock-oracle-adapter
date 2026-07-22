@@ -1,5 +1,5 @@
 import { RiskOracle } from './RiskOracle';
-import { Logger, NoopLogger } from './Logger';
+import { Logger, noopLogger } from './Logger';
 
 /**
  * Decorator that de-duplicates concurrent `getScore(destination)` calls.
@@ -12,7 +12,7 @@ export class CoalescingOracle implements RiskOracle {
 
   constructor(
     private readonly inner: RiskOracle,
-    private readonly logger: Logger = NoopLogger,
+    private readonly logger: Logger = noopLogger,
   ) {}
 
   async getScore(destination: string): Promise<number> {
@@ -35,12 +35,17 @@ export class CoalescingOracle implements RiskOracle {
         this.inFlightByDestination.delete(destination);
         this.logger.debug('CoalescingOracle.inFlightEnd', { destination });
       }
+    }).catch(() => {
+      // `finally` passes a rejection straight through, so this bookkeeping
+      // chain mirrors p's rejection. Callers receive `p` itself and own its
+      // rejection; swallow it here so it is not reported as an unhandled one.
     });
 
     p.catch((err) => {
-      // Attach a logger side-effect without changing the thrown error.
+      // Log the failure without rethrowing: the derived promise is discarded,
+      // so rethrowing here would surface as an unhandled rejection while
+      // changing nothing for the caller awaiting `p`.
       this.logger.warn('CoalescingOracle.innerFailed', { destination, err });
-      throw err;
     });
 
     return p;

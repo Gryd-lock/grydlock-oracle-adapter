@@ -29,20 +29,26 @@ const CHECKS = [
   {
     name: 'StubOracle only',
     entry: `export { StubOracle } from './src/index.ts';`,
-    budgetBytes: 5 * KB,
+    // Raised from 5 KB in #68: StubOracle now validates every destination
+    // through the from-scratch strkey codec before the fixture lookup.
+    budgetBytes: 10 * KB,
     // Everything this import pattern is allowed to bundle. Any other module
     // contributing bytes to the output fails the check.
     allowedInputs: [
       'src/index.ts',
       'src/StubOracle.ts',
       'src/RiskOracle.ts',
+      'src/DestinationValidator.ts',
+      'src/StrKeyCodec.ts',
+      'src/OracleError.ts',
       'src/fixtures/testkit/scores.json',
     ],
   },
   {
     name: 'full barrel',
     entry: `export * from './src/index.ts';`,
-    budgetBytes: 10 * KB,
+    // Raised from 10 KB in #68, for the same reason as above.
+    budgetBytes: 14 * KB,
     allowedInputs: null, // the whole package — no allowlist to enforce
   },
 ];
