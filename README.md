@@ -555,5 +555,6 @@ _Part of the Gryd Lock project. Interface defined, live oracle not yet wired._
 | InvalidDestinationError | INVALID_DESTINATION | The supplied Stellar destination is invalid. | Malformed address or asset identifier |
 | UnrecognizedDestinationError | UNRECOGNIZED_DESTINATION | The destination is valid but not recognized. | Destination not present in oracle data |
 | ContractIncompatibilityError | CONTRACT_INCOMPATIBILITY | The adapter is incompatible with the oracle contract. | ABI/version mismatch |
+| QuorumNotMetError | QUORUM_NOT_MET | `RiskOracleAggregator` could not reach its configured quorum of successful responses. | Too many sources failed/timed out, including the all-sources-failed case |
 
 </div>

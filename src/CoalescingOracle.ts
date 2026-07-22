@@ -1,5 +1,5 @@
 import { RiskOracle } from './RiskOracle';
-import { Logger, NoopLogger } from './Logger';
+import { Logger, noopLogger } from './Logger';
 
 /**
  * Decorator that de-duplicates concurrent `getScore(destination)` calls.
@@ -12,7 +12,7 @@ export class CoalescingOracle implements RiskOracle {
 
   constructor(
     private readonly inner: RiskOracle,
-    private readonly logger: Logger = NoopLogger,
+    private readonly logger: Logger = noopLogger,
   ) {}
 
   async getScore(destination: string): Promise<number> {
@@ -46,6 +46,3 @@ export class CoalescingOracle implements RiskOracle {
     return p;
   }
 }
-
-
-

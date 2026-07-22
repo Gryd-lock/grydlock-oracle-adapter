@@ -1,5 +1,3 @@
-import { StrKey } from '@stellar/stellar-sdk';
-import { InvalidDestinationError } from './OracleError';
 import { RiskOracle } from './RiskOracle';
 import { scores } from './fixtures/testkit';
 
@@ -15,8 +13,6 @@ const DEFAULT_SCORE = 0;
  * signing flow can be built and tested with no live oracle and no
  * network access.
  */
-import { Logger, NoopLogger } from './Logger';
-
 export class StubOracle implements RiskOracle {
   /**
    * Looks the destination up in the vendored `grydlock-testkit` fixture scores.
@@ -30,4 +26,3 @@ export class StubOracle implements RiskOracle {
     return scores[destination] ?? DEFAULT_SCORE;
   }
 }
-

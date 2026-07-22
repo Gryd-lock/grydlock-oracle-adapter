@@ -20,6 +20,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "size": "node scripts/bundle-size.mjs",
     "docs": "typedoc",
     "docs:check": "typedoc --emit none",
     "prepare": "husky",

@@ -96,3 +96,33 @@
       super(message, 'CONTRACT_INCOMPATIBILITY', context);
     }
   }
+
+  /** Structured context describing why an aggregation could not reach quorum. */
+  export interface QuorumNotMetContext extends OracleErrorContext {
+    /** Successful responses required before the aggregate can be produced. */
+    required: number;
+    /** Successful responses actually received before the decision was made. */
+    succeeded: number;
+    /** Total number of sources configured on the aggregator. */
+    total: number;
+    /** Source label -> stringified failure, for sources that failed or timed out in time to count. */
+    failures?: Readonly<Record<string, string>>;
+  }
+
+  /**
+   * Fewer than the configured quorum of sources answered successfully
+   * (including the zero-successful-sources case) before the aggregator gave
+   * up. Thrown by {@link RiskOracleAggregator}.
+   */
+  export class QuorumNotMetError extends OracleError {
+    declare public readonly context: Readonly<QuorumNotMetContext>;
+
+    constructor(destination: string, context: Omit<QuorumNotMetContext, 'destination'>) {
+      super(
+        `Only ${context.succeeded}/${context.required} required source(s) answered ` +
+          `successfully for "${destination}" (${context.total} configured).`,
+        'QUORUM_NOT_MET',
+        { ...context, destination },
+      );
+    }
+  }
