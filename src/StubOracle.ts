@@ -32,4 +32,3 @@ export class StubOracle implements RiskOracle {
     return scores[canonical] ?? DEFAULT_SCORE;
   }
 }
-

@@ -50,7 +50,12 @@ export class CoalescingOracle implements RiskOracle {
 
     return p;
   }
+
+  private clearInFlight(destination: string, p: Promise<number>): void {
+    // Only delete if it's still the same promise instance.
+    if (this.inFlightByDestination.get(destination) === p) {
+      this.inFlightByDestination.delete(destination);
+      this.logger.debug('CoalescingOracle.inFlightEnd', { destination });
+    }
+  }
 }
-
-
-

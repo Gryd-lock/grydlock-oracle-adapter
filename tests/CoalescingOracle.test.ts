@@ -122,4 +122,3 @@ describe('CoalescingOracle', () => {
     await expect(p2).resolves.toBe(99);
   });
 });
-

@@ -4,6 +4,7 @@
   "description": "Read-client that fetches a 0-100 risk score for a Stellar address or asset from an on-chain risk oracle.",
   "license": "MIT",
   "private": true,
+  "sideEffects": false,
   "engines": {
     "node": ">=20"
   },
@@ -20,6 +21,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "size": "node scripts/bundle-size.mjs",
     "docs": "typedoc",
     "docs:check": "typedoc --emit none",
     "prepare": "husky",
@@ -47,5 +49,8 @@
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.0.1"
+  },
+  "overrides": {
+    "axios": "^1.18.1"
   }
 }
