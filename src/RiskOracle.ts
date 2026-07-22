@@ -52,5 +52,9 @@ export interface ScoredResult {
  * consumers of `getScore` are unaffected.
  */
 export interface DetailedRiskOracle extends RiskOracle {
+  /**
+   * @param destination A Stellar address or asset identifier.
+   * @returns The score plus the metadata needed to judge how much to trust it.
+   */
   getScoreDetailed(destination: string): Promise<ScoredResult>;
 }

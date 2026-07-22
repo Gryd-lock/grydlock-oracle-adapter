@@ -17,7 +17,8 @@ describe('CircuitBreakerOracle', () => {
     config = {
       failureThreshold: 3,
       cooldownWindow: 5000,
-      isInfrastructureError: (error: any) => error.message === 'Network Error'
+      isInfrastructureError: (error: unknown) =>
+        error instanceof Error && error.message === 'Network Error',
     };
     circuitBreaker = new CircuitBreakerOracle(mockOracle, config);
   });

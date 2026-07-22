@@ -10,13 +10,19 @@ export interface CircuitBreakerConfig {
   failureThreshold: number;
   cooldownWindow: number;
   fallback?: ((destination: string) => Promise<number>) | Error;
-  isInfrastructureError?: (error: any) => boolean;
+  isInfrastructureError?: (error: unknown) => boolean;
 }
 
-export function defaultIsInfrastructureError(error: any): boolean {
+function stringProp(error: unknown, key: 'message' | 'name'): string {
+  if (typeof error !== 'object' || error === null) return '';
+  const value = (error as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value : '';
+}
+
+export function defaultIsInfrastructureError(error: unknown): boolean {
   if (!error) return false;
-  const msg = (error.message || '').toLowerCase();
-  const name = (error.name || '').toLowerCase();
+  const msg = stringProp(error, 'message').toLowerCase();
+  const name = stringProp(error, 'name').toLowerCase();
   return (
     msg.includes('network') ||
     msg.includes('timeout') ||
@@ -30,7 +36,7 @@ export class CircuitBreakerOracle implements RiskOracle {
   private state: CircuitBreakerState = CircuitBreakerState.CLOSED;
   private failures: number = 0;
   private nextAttempt: number = 0;
-  private readonly isInfraError: (error: any) => boolean;
+  private readonly isInfraError: (error: unknown) => boolean;
 
   constructor(
     private readonly oracle: RiskOracle,
@@ -89,7 +95,7 @@ export class CircuitBreakerOracle implements RiskOracle {
     this.nextAttempt = 0;
   }
 
-  private async handleFallback(destination: string, originalError?: any): Promise<number> {
+  private async handleFallback(destination: string, originalError?: unknown): Promise<number> {
     if (this.config.fallback !== undefined) {
       if (this.config.fallback instanceof Error) {
         throw this.config.fallback;
