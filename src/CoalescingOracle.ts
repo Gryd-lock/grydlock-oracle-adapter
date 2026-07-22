@@ -35,12 +35,17 @@ export class CoalescingOracle implements RiskOracle {
         this.inFlightByDestination.delete(destination);
         this.logger.debug('CoalescingOracle.inFlightEnd', { destination });
       }
+    }).catch(() => {
+      // `finally` passes a rejection straight through, so this bookkeeping
+      // chain mirrors p's rejection. Callers receive `p` itself and own its
+      // rejection; swallow it here so it is not reported as an unhandled one.
     });
 
     p.catch((err) => {
-      // Attach a logger side-effect without changing the thrown error.
+      // Log the failure without rethrowing: the derived promise is discarded,
+      // so rethrowing here would surface as an unhandled rejection while
+      // changing nothing for the caller awaiting `p`.
       this.logger.warn('CoalescingOracle.innerFailed', { destination, err });
-      throw err;
     });
 
     return p;

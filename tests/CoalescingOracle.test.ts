@@ -37,12 +37,16 @@ class ControlledOracle implements RiskOracle {
   resolve(destination: string, value: number) {
     const entry = this.resolvers.get(destination);
     if (!entry) throw new Error(`No in-flight promise for destination: ${destination}`);
+    // Clear the entry so a subsequent getScore for this destination gets a
+    // fresh promise rather than this already-settled one.
+    this.resolvers.delete(destination);
     entry.resolve(value);
   }
 
   reject(destination: string, error: unknown) {
     const entry = this.resolvers.get(destination);
     if (!entry) throw new Error(`No in-flight promise for destination: ${destination}`);
+    this.resolvers.delete(destination);
     entry.reject(error);
   }
 }
