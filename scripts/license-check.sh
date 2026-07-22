@@ -49,11 +49,20 @@ printf '  - %s\n' "${LICENSES[@]:-<none>}"
 ALLOWED=0
 for lic in "${LICENSES[@]:-}"; do
   [ -z "${lic}" ] && continue
-  if printf '%s\n' "${DENYLIST}" | grep -qx "${lic}"; then
+  # Unquoted on purpose: ALLOWLIST/DENYLIST are space-separated lists, and
+  # word-splitting them here is what turns "MIT Apache-2.0 ..." into one
+  # entry per line for grep -x (exact whole-line match) below. Quoting them
+  # (as this used to do) fed grep -x the entire list as a single line,
+  # which could never exactly match a single license id — every license,
+  # including ones already in the default allowlist, was misreported as
+  # "UNKNOWN (not in allowlist)".
+  # shellcheck disable=SC2086
+  if printf '%s\n' ${DENYLIST} | grep -qx "${lic}"; then
     echo "DENIED license detected: ${lic}" >&2
     ALLOWED=1
   fi
-  if ! printf '%s\n' "${ALLOWLIST}" | grep -qx "${lic}"; then
+  # shellcheck disable=SC2086
+  if ! printf '%s\n' ${ALLOWLIST} | grep -qx "${lic}"; then
     echo "UNKNOWN (not in allowlist) license detected: ${lic}" >&2
     ALLOWED=1
   fi
