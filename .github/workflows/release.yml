@@ -1,0 +1,36 @@
+name: Release
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # semantic-release and its plugins are fetched by npx at release time
+      # rather than pinned in package.json/package-lock.json, so adopting
+      # this workflow doesn't require a lockfile change.
+      - run: >
+          npx --yes
+          -p semantic-release
+          -p @semantic-release/commit-analyzer
+          -p @semantic-release/release-notes-generator
+          -p @semantic-release/changelog
+          -p @semantic-release/git
+          -p @semantic-release/github
+          semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
