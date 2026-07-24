@@ -469,6 +469,30 @@ This is enforced two ways:
   lints every commit on a pull request, covering contributors who bypass the local hook (e.g.
   `git commit --no-verify`).
 
+### Release process
+
+Versioning and `CHANGELOG.md` are automated with
+[semantic-release](https://semantic-release.gitbook.io/), driven entirely by the Conventional
+Commits history above — there is no manual version bump.
+
+- **Trigger**: [`.github/workflows/release.yml`](.github/workflows/release.yml) runs
+  semantic-release on every push to `main`.
+- **Version bump**: derived from commit types since the last release — `fix:` → patch,
+  `feat:` → minor, a `BREAKING CHANGE:` footer → major. Commits that don't map to a bump
+  (`docs`, `chore`, `style`, etc.) don't trigger a release.
+- **Output**: a Git tag, an updated `CHANGELOG.md`, and a GitHub Release with generated notes.
+  The `package.json` `version` field is updated and committed back to `main` by the
+  `@semantic-release/git` plugin (commit message `chore(release): <version> [skip ci]`, which
+  intentionally skips re-triggering CI/release).
+- **npm publishing**: **not enabled.** This package is `"private": true` and not intended for
+  npm consumption today, so the `@semantic-release/npm` plugin is deliberately omitted from
+  [`.releaserc.json`](.releaserc.json). Releases are tags + changelog + GitHub Release only.
+  If the package needs to be published to npm later, that's a separate decision — add the
+  `@semantic-release/npm` plugin and flip `private` to `false` at that point.
+- **Tooling install**: semantic-release and its plugins are resolved by `npx` at release time
+  rather than added to `devDependencies`/`package-lock.json`, so this workflow doesn't require
+  a lockfile change to adopt.
+
 ## Gryd Lock Organization
 
 Gryd Lock is split across four repos in the `Gryd-lock` GitHub org:
