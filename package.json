@@ -22,6 +22,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "size": "node scripts/bundle-size.mjs",
+    "generate:fixtures": "node scripts/generate-fixture-text.mjs",
     "docs": "typedoc",
     "docs:check": "typedoc --emit none",
     "prepare": "husky",
