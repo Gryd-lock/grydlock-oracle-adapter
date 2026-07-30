@@ -107,6 +107,22 @@ export class CircuitBreakerOracle implements RiskOracle {
       return this.getScore(destination);
     }
 
+    if (this.state === CircuitBreakerState.HALF_OPEN) {
+      // A probe admitted by a previous call is still outstanding; coalesce
+      // onto it (INV1) instead of issuing a second downstream call.
+      if (this.halfOpenProbe === null) {
+        // Unreachable if INV1 holds: `state` only ever becomes HALF_OPEN in
+        // the same synchronous block that sets `halfOpenProbe` (above), and
+        // both are only cleared together, in `runProbe`'s `finally`. Fail
+        // loudly rather than silently double-probing if this ever regresses.
+        throw new Error(
+          'CircuitBreakerOracle invariant violated: HALF_OPEN with no active probe (INV1)',
+        );
+      }
+      return this.halfOpenProbe;
+    }
+
+    // CLOSED: each call is independent; no probe admission/coalescing applies.
     try {
       const score = await this.oracle.getScore(destination);
       return score;
