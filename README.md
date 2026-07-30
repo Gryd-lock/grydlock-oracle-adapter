@@ -94,7 +94,8 @@ graph TB
 
 `src/fixtures/testkit/` is a vendored, point-in-time copy of `grydlock-testkit`'s
 `destinations.json` and `scores.json` — not a live sync. If the testkit fixtures change, re-copy
-them here to pick up the update.
+them here, then run `npm run generate:fixtures` to refresh their raw-text companion modules (see
+below), to pick up the update.
 
 Because these files are manually copied rather than pulled in as a dependency, a bad copy —
 truncated file, wrong schema version, non-numeric score — would otherwise pass TypeScript's
@@ -102,11 +103,37 @@ structural typing silently and only surface as a confusing runtime failure. To c
 source, `src/fixtures/testkit/schema.ts` validates the shape of both files, and
 `src/fixtures/testkit/index.ts` runs that validation once, when the module is first imported
 (not on every `StubOracle.getScore()` call). A malformed fixture throws a `FixtureValidationError`
-naming the offending file and field, e.g.:
+naming the offending file, field, and — since validation happens during parsing rather than after
+it — the entry's exact position in the source file:
 
 ```
-FixtureValidationError: Invalid vendored fixture "scores.json": score for "GABC..." must be a finite number, got string ("10")
+FixtureValidationError: Invalid vendored fixture "scores.json": score for "GABC..." must be a finite number, got string ("10") (at line 4, column 32, offset 118)
 ```
+
+**Loading is incremental, not materialize-then-validate.** `scores.ts`/`destinations.ts` don't
+import the `.json` files directly (which would hand a bundler's JSON loader — or `JSON.parse` — the
+whole file to parse into a JS object graph before validation could even start). Instead:
+
+- `scripts/generate-fixture-text.mjs` emits `scores.text.ts`/`destinations.text.ts`, each just the
+  vendored JSON file's exact source characters embedded as a string constant (`export default
+  "...";`). That's a plain string literal any bundler or the browser loads like any other module —
+  no Node-only `fs`/streaming API ships in the bundle, and no special bundler loader config is
+  required downstream. `tests/fixtureText.sync.test.ts` fails the build if a generated file drifts
+  from its source `.json`.
+- `src/fixtures/testkit/jsonScanner.ts` is a small hand-rolled, token-at-a-time JSON tokenizer
+  (`JsonScanner`) over that raw text, tracking line/column/offset as it scans.
+- `schema.ts`'s `parseScoresFixtureIncremental`/`parseDestinationsFixtureIncremental` use it to
+  validate each entry the moment it's tokenized, so a malformed entry throws — with its source
+  position — before any later entry in the file is even scanned. (`validateScoresFixture`/
+  `validateDestinationsFixture`, validating an already-parsed value, remain for callers that have
+  one on hand — e.g. tests.)
+
+`tests/benchmarks/fixtureStreaming.budget.test.ts` enforces this with hard budgets at 50,000
+synthetic destinations (an order of magnitude past the real fixture's size): import-to-first-lookup
+latency stays under 600ms, and — the check that specifically rules out a "parse fully but budget
+generously" shortcut — the incremental parser's peak retained heap stays under a small constant
+multiple of a deliberately-materialize-twice baseline built solely for that comparison, verified
+structurally (via a `JSON.parse` call-count spy) rather than by absolute numbers alone.
 
 `StubOracle` and the test suite both import the validated `scores` / `destinations` exports from
 `src/fixtures/testkit/index.ts` rather than reading the JSON files directly, so any re-copy of the
@@ -243,7 +270,8 @@ grydlock-oracle-adapter/
 ├── .github/workflows/ci.yml          ← CI: typecheck, lint, format check, test, build, bundle size, commitlint
 │
 ├── scripts/
-│   └── bundle-size.mjs               ← esbuild-based bundle-size budget + tree-shaking check
+│   ├── bundle-size.mjs                ← esbuild-based bundle-size budget + tree-shaking check
+│   └── generate-fixture-text.mjs      ← Emits *.text.ts raw-text modules from the vendored *.json
 │
 ├── src/
 │   ├── RiskOracle.ts                  ← Interface definition + ScoredResult metadata types
@@ -256,7 +284,10 @@ grydlock-oracle-adapter/
 │   ├── fixtures/testkit/
 │   │   ├── destinations.json          ← Vendored grydlock-testkit fixture (labelled destinations)
 │   │   ├── scores.json                ← Vendored grydlock-testkit fixture (destination -> score)
-│   │   ├── schema.ts                  ← Runtime shape validation for both fixture files
+│   │   ├── destinations.text.ts       ← Generated: destinations.json's raw text as a string constant
+│   │   ├── scores.text.ts             ← Generated: scores.json's raw text as a string constant
+│   │   ├── jsonScanner.ts             ← Hand-rolled incremental JSON tokenizer + position tracking
+│   │   ├── schema.ts                  ← Runtime shape validation (object-based + incremental) for both files
 │   │   └── index.ts                   ← Validates + exports the fixtures once, at module load
 │   └── index.ts                       ← Barrel export
 │
@@ -265,6 +296,9 @@ grydlock-oracle-adapter/
     ├── StrKeyCodec.test.ts            ← base32 / CRC16-XModem / version-byte unit tests
     ├── StrKeyCodec.differential.test.ts ← 5k-input differential fuzz against the SDK's StrKey
     ├── DestinationValidator.test.ts   ← destination grammar + SEP-11 asset-code boundary tests
+    ├── fixtureSchema.incremental.test.ts ← Incremental parser parity + position assertions
+    ├── fixtureText.sync.test.ts       ← Fails if a generated *.text.ts drifts from its source .json
+    ├── benchmarks/fixtureStreaming.budget.test.ts ← Enforced latency/memory budgets at 50k entries
     └── ProvenanceOracle.test.ts       ← provenance record shape, pass-through, and error-path tests
 ```
 

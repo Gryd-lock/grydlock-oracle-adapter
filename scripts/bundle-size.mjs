@@ -31,6 +31,10 @@ const CHECKS = [
     entry: `export { StubOracle } from './src/index.ts';`,
     // Raised from 5 KB in #68: StubOracle now validates every destination
     // through the from-scratch strkey codec before the fixture lookup.
+    // Fixture loading switched from a JSON import + two-pass validate to
+    // an incremental text tokenizer (jsonScanner.ts/schema.ts) in the
+    // streaming-fixture-parser change; net bundle size still fits the
+    // existing 10 KB budget (measured ~9.6 KB minified).
     budgetBytes: 10 * KB,
     // Everything this import pattern is allowed to bundle. Any other module
     // contributing bytes to the output fails the check.
@@ -41,9 +45,10 @@ const CHECKS = [
       'src/DestinationValidator.ts',
       'src/StrKeyCodec.ts',
       'src/OracleError.ts',
-      'src/fixtures/testkit/scores.json',
+      'src/fixtures/testkit/scores.text.ts',
       'src/fixtures/testkit/scores.ts',
       'src/fixtures/testkit/schema.ts',
+      'src/fixtures/testkit/jsonScanner.ts',
     ],
   },
   {
