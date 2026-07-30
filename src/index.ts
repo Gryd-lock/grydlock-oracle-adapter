@@ -28,3 +28,13 @@ export {
 } from './StrKeyCodec';
 export { Logger, LogFields, noopLogger } from './Logger';
 export { ProvenanceOracle, ProvenanceOracleOptions, ScoreProvenance } from './ProvenanceOracle';
+export {
+  BatchRiskOracle,
+  BatchRiskOracleOptions,
+  BatchDestinationRequest,
+  BatchCallOptions,
+  BatchItemResult,
+  BatchItemStatus,
+  BatchResult,
+  toBatchOracle,
+} from './BatchRiskOracle';

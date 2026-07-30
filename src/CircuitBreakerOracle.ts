@@ -28,91 +28,32 @@ export function defaultIsInfrastructureError(error: unknown): boolean {
 }
 
 /**
- * ## Concurrency invariants (written correctness argument)
+ * Circuit breaker decorator around a RiskOracle.
  *
- * This class has exactly one shared mutable state machine (`state`, `failures`,
- * `nextAttempt`, `halfOpenProbe`) accessed by however many concurrent `getScore`
- * calls happen to be in flight. There is no external lock, mutex, or `Atomics`
- * use anywhere in this file. The argument below is why that is still safe.
+ * # Concurrency invariants
  *
- * ### Ground rule: synchronous blocks are atomic
+ * The full correctness argument (linearizability-style proof, the exact
+ * invariants below, and how they map onto the fuzzer's assertions) lives in
+ * `CONCURRENCY_INVARIANTS.md`. In short, this class maintains:
  *
- * JavaScript's event loop runs each synchronous stretch of code to completion
- * before running any other callback/microtask. Two `getScore` calls can only
- * "interleave" at an `await` point — i.e. wherever one call suspends, control
- * can pass to another call's continuation, but never in the middle of a
- * sequence of statements that contains no `await`. Every read-then-write of
- * `state` / `failures` / `nextAttempt` / `halfOpenProbe` in this file happens
- * inside such an uninterrupted synchronous stretch (no `await` between the
- * read and the write). Consequently every individual state transition below
- * is atomic with respect to every other `getScore` call, with no explicit
- * lock required — this is the mechanism the invariants below rely on.
- *
- * ### INV1 — At most one in-flight probe (no thundering herd)
- *
- * At any instant, at most one call into the wrapped `oracle.getScore` is
- * outstanding as a result of a HALF_OPEN admission decision made by *this*
- * instance. Concretely: across one "OPEN episode" (the span from the moment
- * some caller observes `state === OPEN && Date.now() >= nextAttempt` until
- * the resulting probe settles), exactly one call reaches `this.oracle.getScore`.
- * Every other caller that arrives while that probe is outstanding is admitted
- * as a *coalesced* caller: it never calls the wrapped oracle itself, and
- * instead receives (resolves/rejects with) the exact same outcome as the one
- * real probe. This holds because the admission check
- * (`state === OPEN && time elapsed` → set `state = HALF_OPEN` and start
- * `halfOpenProbe`) and the coalescing check (`state === HALF_OPEN` → return
- * the existing `halfOpenProbe`) are both synchronous, uninterrupted
- * read-modify-write sequences on `state`/`halfOpenProbe` (ground rule above),
- * so however many calls arrive "simultaneously" (i.e. before any of them has
- * awaited anything), they still execute this admission logic one at a time,
- * in some order, and only the first one to run can find `halfOpenProbe`
- * still `null`.
- *
- * ### INV2 — Deterministic settlement; failure dominates a concurrent success
- *
- * Because of INV1, a HALF_OPEN episode has exactly one real outcome (the
- * single probe's resolution or rejection), and every coalesced caller for
- * that episode observes *that same* outcome — there is no separate "second
- * success" or "second failure" for the same episode that could race the
- * first. The breaker's resulting state is a pure function of that one
- * outcome: probe succeeds → `CLOSED` (failures reset); probe throws an
- * infrastructure error → `OPEN` with a fresh `nextAttempt`; probe throws a
- * non-infrastructure error → `CLOSED` (existing "logically reachable" rule,
- * unchanged from before this fix). A corollary, stated as its own checkable
- * property because it is what the issue calls out explicitly and what the
- * pre-fix code violated: if any evaluated schedule ever produces *two* real
- * downstream calls for the same episode (an implementation regression of
- * INV1), the failure outcome must still win, i.e. the episode must never
- * end up `CLOSED` if any of the racing probes reported an infrastructure
- * failure. The fixed implementation satisfies this vacuously (INV1 makes the
- * race impossible); the fuzzer checks it directly, and the reintroduced-bug
- * baseline is used to show the check is not vacuous in general (it fires
- * against code where the race is possible).
- *
- * ### INV3 — Linearizability: some sequential ordering explains any outcome
- *
- * For any set of N concurrent `getScore` calls against one instance, there
- * exists a sequential ordering of "logical operations" — one per real
- * downstream call (CLOSED-state calls and the single HALF_OPEN probe per
- * episode), *not* one per caller — replaying which against this state
- * machine deterministically reproduces the actual final `state` / `failures`
- * / `nextAttempt`. This follows from the ground rule (each logical
- * operation's state transition is atomic and therefore has a well-defined
- * position in real time relative to the others) plus INV1 (coalesced callers
- * contribute no additional logical operation — they only observe — so they
- * cannot introduce an ordering ambiguity beyond the one already implied by
- * the real operations' settlement order).
- *
- * ### Design choice this fix makes (documented per the issue's requirement)
- *
- * Concurrent callers admitted during an active HALF_OPEN probe **coalesce**
- * onto that probe's outcome rather than failing fast. This was chosen over
- * fail-fast because it gives callers a real answer (the same one the probe
- * gets) instead of an arbitrary "try again" error, mirrors the coalescing
- * behavior `CoalescingOracle` already provides one layer up (so the two
- * decorators agree on this policy when stacked), and is what makes INV2's
- * "no race to arbitrate" property hold by construction instead of by adding
- * a second arbitration mechanism.
+ * - **INV-CB-1 (single-flight probe)**: at most one call to
+ *   `this.oracle.getScore` is ever in flight while `state === HALF_OPEN`.
+ * - **INV-CB-2 (atomic transition)**: the OPEN -> HALF_OPEN transition and
+ *   the launch of that one probe happen in the same synchronous turn (no
+ *   `await` separates the eligibility check from claiming the probe slot),
+ *   so JS's run-to-completion guarantee makes the transition atomic without
+ *   any explicit lock.
+ * - **INV-CB-3 (deterministic settlement)**: a probe failure always wins
+ *   over a concurrently-*requested* success, because there is structurally
+ *   only ever one probe outcome to apply — see the doc for why this
+ *   subsumes the "failure beats concurrent success" requirement.
+ * - **INV-CB-4 (per-destination correctness)**: a caller for destination X
+ *   never receives the resolved score of a probe launched for a different
+ *   destination Y. Callers that arrive while a probe (launched by some
+ *   other caller, possibly for a different destination) is in flight await
+ *   *that probe's outcome* (success/failure, i.e. the resulting breaker
+ *   state) and then issue their own call against the freshly-settled state,
+ *   rather than reusing the probe's resolved value.
  */
 export class CircuitBreakerOracle implements RiskOracle {
   private state: CircuitBreakerState = CircuitBreakerState.CLOSED;
@@ -121,9 +62,8 @@ export class CircuitBreakerOracle implements RiskOracle {
   private readonly isInfraError: (error: unknown) => boolean;
 
   /**
-   * Non-null exactly while a HALF_OPEN probe is outstanding (i.e. exactly
-   * when `state === HALF_OPEN`, see INV1). Concurrent callers admitted while
-   * this is set coalesce onto it instead of invoking `oracle.getScore` again.
+   * The single in-flight HALF_OPEN probe, or null when no probe is running.
+   * Non-null if and only if `state === HALF_OPEN` (see INV-CB-1/2 above).
    */
   private halfOpenProbe: Promise<number> | null = null;
 
@@ -144,15 +84,27 @@ export class CircuitBreakerOracle implements RiskOracle {
         return this.handleFallback(destination);
       }
 
-      // Cooldown elapsed: admit exactly one probe for this episode (INV1).
-      // Everything from reading `state`/`nextAttempt` above to setting
-      // `halfOpenProbe` below is one synchronous stretch with no `await`,
-      // so no other concurrent call can observe a half-finished transition.
-      if (this.halfOpenProbe === null) {
-        this.state = CircuitBreakerState.HALF_OPEN;
-        this.halfOpenProbe = this.runProbe(destination);
-      }
+      // Cooldown elapsed: this call claims the probe slot. Everything from
+      // the `state === OPEN` check above down to this point is synchronous
+      // (no `await`), so exactly one concurrent caller can ever observe
+      // "OPEN and cooldown elapsed" and execute this branch before the
+      // mutation below flips `state` to HALF_OPEN for everyone else. See
+      // INV-CB-2 in CONCURRENCY_INVARIANTS.md.
+      this.state = CircuitBreakerState.HALF_OPEN;
+      this.halfOpenProbe = this.runProbe(destination);
       return this.halfOpenProbe;
+    }
+
+    if (this.state === CircuitBreakerState.HALF_OPEN) {
+      // Some other caller already owns the single in-flight probe (INV-CB-1).
+      // Wait for it to settle so `state` reflects the outcome, then
+      // re-evaluate from scratch for *this* destination rather than
+      // returning the probe's value directly (INV-CB-4). The rejection (if
+      // any) is intentionally swallowed here: it belongs to the probe's own
+      // caller, and re-throwing an unawaited/unrelated rejection here would
+      // itself be a floating-promise hazard.
+      await this.halfOpenProbe!.catch(() => undefined);
+      return this.getScore(destination);
     }
 
     if (this.state === CircuitBreakerState.HALF_OPEN) {
@@ -172,20 +124,23 @@ export class CircuitBreakerOracle implements RiskOracle {
 
     // CLOSED: each call is independent; no probe admission/coalescing applies.
     try {
-      return await this.oracle.getScore(destination);
+      const score = await this.oracle.getScore(destination);
+      return score;
     } catch (error) {
       if (this.isInfraError(error)) {
         this.recordFailure();
         return this.handleFallback(destination, error);
       }
+
+      // Non-infrastructure errors indicate the system is logically
+      // reachable; nothing to do to CLOSED-state bookkeeping.
       throw error;
     }
   }
 
   /**
-   * The single HALF_OPEN probe for one OPEN episode (INV1). Every caller
-   * coalesced onto this promise receives exactly this settlement, which is
-   * what makes INV2/INV3 hold for the episode.
+   * Executes the single HALF_OPEN probe call and applies its outcome to the
+   * breaker's state. Only ever invoked once per HALF_OPEN cycle (INV-CB-1).
    */
   private async runProbe(destination: string): Promise<number> {
     try {
@@ -198,7 +153,8 @@ export class CircuitBreakerOracle implements RiskOracle {
         return this.handleFallback(destination, error);
       }
 
-      // Non-infrastructure errors indicate the system is logically reachable.
+      // Non-infrastructure errors indicate the system is logically
+      // reachable, even though this particular probe call failed.
       this.reset();
       throw error;
     } finally {
