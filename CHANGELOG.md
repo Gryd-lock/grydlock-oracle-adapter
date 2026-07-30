@@ -1,0 +1,48 @@
+# 1.0.0 (2026-07-30)
+
+
+### Bug Fixes
+
+* **benchmark:** generate valid strkeys and repair the lookup measurement ([5022aa9](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/5022aa904a5f214206431624dfd3724428df8b42))
+* **ci:** add permissions block + safe format check ([3c00fd8](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/3c00fd8924debf62dc724dceca70cf984881fa35))
+* **CircuitBreakerOracle:** eliminate HALF_OPEN thundering herd; prove with a PCT fuzzer ([679b16c](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/679b16c9cc5040fdd1cc47afc5b9d0ce840788fb))
+* **ci:** repair package-lock.json drift and clear pre-existing lint/docs gates ([723d3b3](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/723d3b3f35673357871f900c363063a0a7354578)), closes [hi#severity](https://github.com/hi/issues/severity)
+* **ci:** restrict trigger to pull_request only ([1642a66](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/1642a66d7e8cdaa466c3373ae494465b903564a6))
+* **ci:** trigger workflow on feature branches (gf-**) ([d092c52](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/d092c521f66f4aca9cc5d05f50538d637c11fda3))
+* **CoalescingOracle:** stop leaking an unhandled rejection on failure ([f8290eb](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/f8290eb9d95e62e233376924564b4ea9f4d6f9ec))
+* **coalescing:** stop detached promise chains raising unhandled rejections ([269dc41](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/269dc41cb78fe5bff458ae50dfad3de980b906b7))
+* **concurrency:** eliminate HALF_OPEN thundering herd and unhandled-rejection leak ([eca9efe](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/eca9efe9b30b07fab7e8de7479a0177f48df03e4))
+* **license-check:** fix a quoting bug that flagged every license as unknown ([09fe4ad](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/09fe4ad9d3f13af68e4619df5f2716fbb774b83a))
+* **lint:** replace `any` with `unknown` and declare the URL global ([be229d2](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/be229d2684dcb3261595340d1ac49a2affc816bd))
+* **logger:** import noopLogger instead of the non-existent NoopLogger ([b5741f6](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/b5741f60487fe841ca917db779775fe08cbed61e))
+* **size:** repair StubOracle-only tree-shaking leak and a broken benchmark path ([a66a37e](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/a66a37e7a910e27deb30faa99a40f70c409a4b33)), closes [#76](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/76)
+* **supply-chain:** override axios to resolve the high-severity advisory ([6b9ee62](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/6b9ee62861533abc095e459dfc8c52f8365c3c62)), closes [hi#severity](https://github.com/hi/issues/severity) [hi#severity](https://github.com/hi/issues/severity)
+* **sync:** scope tiers.ts parsing to the TIERS array, not the whole file ([ebfcf61](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/ebfcf6126770b10da2b3e932eab5d4da264bc466)), closes [#69](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/69)
+
+
+### Features
+
+* add barrel export in src/index.ts ([b2d2d5a](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/b2d2d5aa696c8bbc4004473f694a68af41b8f2bf))
+* add bundle-size budget and tree-shaking check for extension consumption ([9af862b](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/9af862b0429a0715e50b4f6a3731702d1e0c78e0)), closes [#39](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/39)
+* add composable middleware pipeline for oracle cross-cutting concerns ([0a15177](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/0a151772290dcb5c92e010a808e5531f043e795a)), closes [6-#10](https://github.com/6-/issues/10) [#27](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/27) [#41](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/41) [#6](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/6) [#7](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/7) [#9](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/9) [#46](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/46)
+* add hardcoded score map to StubOracle ([d90092e](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/d90092e6b3258802927bcf421064eb17ca13e33a))
+* add score provenance audit trail via ProvenanceOracle decorator ([d6a4061](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/d6a4061193c3b814c99deaf24f830a931cf7ef9f)), closes [#9](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/9) [#47](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/47) [#48](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/48)
+* add shared oracle error taxonomy ([40bf2ac](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/40bf2ac904fc00e3200f035d231c3e6715fd8d4c))
+* add TypeDoc API reference published to GitHub Pages ([afe6fa6](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/afe6fa6a8deef31fd4c276501dec2ecc1c1f88fa))
+* **aggregation:** add Byzantine-fault-tolerant RiskOracleAggregator ([32835ab](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/32835abdc72ddfe27233de0736cfe25d693d8a8f))
+* automate cross-repo shared-contract drift verification ([c478452](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/c47845294782be0b31b72e6819899a2fa7515124)), closes [#45](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/45)
+* back StubOracle with vendored grydlock-testkit fixtures ([2136c4c](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/2136c4cc00b4f2edeaff028f6ea9d3ab90a0cee6))
+* **batch:** add BatchRiskOracle with deadline-feasible, priority-aware scheduling ([830f71b](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/830f71b17e0300a69225a9baa0e0f3b60542a121)), closes [#72](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/72)
+* **cache:** cost-aware, confidence-weighted cache with SWR (closes [#70](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/70)) ([47be392](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/47be3929b34eec9e57bd145a7da711154d1437fd))
+* define RiskOracle interface ([152301d](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/152301d52d8bb5da768e9144e29dbcd65666fa72))
+* **FallbackOracle:** route tiers with a non-stationary discounted-UCB bandit ([0480b01](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/0480b013871bfca137c8be145074c42fd86e860e)), closes [#71](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/71)
+* **fixtures:** replace materialize-then-validate with incremental streaming parser ([9c52057](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/9c5205783f7c9698ad334ec5a9a77d7d19bedc1f))
+* implement circuit breaker around SorobanOracle closes [#8](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/8) ([e78a789](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/e78a789bb7dd697870de672c2c9da1c1d3d6445e))
+* implement fallback oracle chain ([4d855c8](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/4d855c8246f641e2e12af43c891220fe02480f6b))
+* name and document StubOracle default score fallback ([086f9c4](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/086f9c49580f5dff2b4a3753dde8d4e5a62fb73e))
+* **OracleMiddleware:** statically type DetailedRiskOracle through compose and oracle arrays ([3128a2f](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/3128a2f0a903256e8059d51ceb60430057b5c926))
+* scaffold StubOracle class ([02dd49d](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/02dd49d6736d012ea6edb7eac5636d1afadaefbf))
+* **supply-chain:** add SBOM and license/vulnerability gating ([e399dd3](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/e399dd342c727ad22498b0903043454f8eb53edc)), closes [#13](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/13)
+* validate Stellar destinations before oracle lookup ([890bccc](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/890bccc182c77ef9dd401e98d544c232e661f9f7))
+* validate vendored testkit fixture shapes at module load ([7b64cf7](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/7b64cf75e119a3bde942f839e725db09f2446430)), closes [#19](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/19)
+* **validation:** add spec-compliant strkey codec and destination validator ([e2aea99](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/e2aea998ac841b3b717e92587ef674f450c7bd66))
