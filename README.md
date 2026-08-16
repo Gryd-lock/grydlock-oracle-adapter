@@ -267,10 +267,11 @@ grydlock-oracle-adapter/
 ├── stryker.config.json               ← Mutation testing config (src/ tree)
 │
 ├── .husky/commit-msg                 ← Local commit-msg hook, runs commitlint
-├── .github/workflows/ci.yml          ← CI: typecheck, lint, format check, test, build, bundle size, commitlint
+├── .github/workflows/ci.yml          ← CI: typecheck, lint, format check, test, build, size, docs, commitlint, supply-chain
 │
 ├── scripts/
 │   ├── bundle-size.mjs                ← esbuild-based bundle-size budget + tree-shaking check
+│   ├── check-cross-repo-sync.mjs      ← Cross-repo contract-drift check (run via npm run sync:check)
 │   └── generate-fixture-text.mjs      ← Emits *.text.ts raw-text modules from the vendored *.json
 │
 ├── src/
@@ -365,8 +366,8 @@ build output from #37 lands) for representative import patterns:
 
 | Import pattern                   | Current size (minified) | Budget |
 | -------------------------------- | ----------------------- | ------ |
-| `import { StubOracle }` only     | ~0.8 KB (~0.6 KB gzip)  | 5 KB   |
-| Full barrel (`export * from ..`) | ~0.8 KB (~0.6 KB gzip)  | 10 KB  |
+| `import { StubOracle }` only     | ~9.6 KB (~3.9 KB gzip)  | 10 KB  |
+| Full barrel (`export * from ..`) | ~15.0 KB (~5.8 KB gzip) | 16 KB  |
 
 Two things fail CI:
 
@@ -380,7 +381,7 @@ Two things fail CI:
   (no module-level side effects) or the check fails.
 
 **For extension-side contributors:** the "StubOracle only" row is the integration cost of the
-current recommended usage — under 1 KB gzipped added to the extension bundle.
+current recommended usage — under 4 KB gzipped added to the extension bundle.
 
 ### Mutation testing
 

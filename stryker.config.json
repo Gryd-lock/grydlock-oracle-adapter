@@ -5,6 +5,9 @@
   "testRunner": "vitest",
   "checkers": ["typescript"],
   "tsconfigFile": "tsconfig.json",
+  "vitest": {
+    "configFile": "vitest.mutation.config.ts"
+  },
   "reporters": ["clear-text", "progress", "html"],
   "htmlReporter": {
     "fileName": "reports/mutation/index.html"

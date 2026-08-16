@@ -54,8 +54,15 @@ const CHECKS = [
   {
     name: 'full barrel',
     entry: `export * from './src/index.ts';`,
-    // Raised from 10 KB in #68, for the same reason as above.
-    budgetBytes: 14 * KB,
+    // Raised from 14 KB for the same StubOracle/strkey-codec reasons as the
+    // StubOracle-only row above, plus the batch-scoring surface: the barrel
+    // now also exports the BatchRiskOracle adapter (toBatchOracle), its
+    // LatencyEstimator, and the ProvenanceOracle/Logger decorators. Measured
+    // ~15.0 KB minified (~5.8 KB gzip). The full-barrel pattern only
+    // imports the package; tree-shaking keeps unreferenced modules out of
+    // the bundle, so this budget tracks the always-loaded core (StubOracle
+    // fixture path + batch/provenance decorators), not every export.
+    budgetBytes: 16 * KB,
     allowedInputs: null, // the whole package — no allowlist to enforce
   },
 ];

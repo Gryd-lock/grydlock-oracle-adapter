@@ -26,11 +26,20 @@ export interface BatchCallOptions {
   deadlineMs: number;
 }
 
+/**
+ * How a single destination in a batch was resolved.
+ *
+ * `'fulfilled'` and `'rejected'` mirror the wrapped oracle's success/failure
+ * for the destination; `'deadline-rejected'` means the item was never
+ * started because it could not be admitted with the target confidence.
+ */
 export type BatchItemStatus = 'fulfilled' | 'rejected' | 'deadline-rejected';
 
 /** The individually-recoverable outcome of one destination in a batch. */
 export interface BatchItemResult {
+  /** The destination this result belongs to (echoes the request). */
   destination: string;
+  /** How the destination was resolved (see {@link BatchItemStatus}). */
   status: BatchItemStatus;
   /** Present when `status === 'fulfilled'`. */
   score?: number;
@@ -38,6 +47,7 @@ export interface BatchItemResult {
   error?: unknown;
 }
 
+/** The outcome of a batch: one entry per input request, in the same order. */
 export interface BatchResult {
   /** Same length and order as the input `requests`, one entry per request. */
   results: BatchItemResult[];
@@ -48,9 +58,18 @@ export interface BatchResult {
  * changes to `RiskOracle`/`DetailedRiskOracle` consumers.
  */
 export interface BatchRiskOracle {
+  /**
+   * Score a batch of destinations with a shared deadline. Each destination
+   * is scored at most once (duplicates are coalesced); the returned results
+   * mirror the input order, one entry per request.
+   */
   getScores(requests: BatchDestinationRequest[], options: BatchCallOptions): Promise<BatchResult>;
 }
 
+/**
+ * Tunables for a batch-scoring implementation. Sensible defaults exist for
+ * every field except `maxConcurrency`.
+ */
 export interface BatchRiskOracleOptions {
   /** Hard cap on concurrent in-flight calls to the wrapped oracle. */
   maxConcurrency: number;
@@ -86,6 +105,7 @@ export interface BatchRiskOracleOptions {
   minSamplesForEstimate?: number;
   /** Assumed latency used only before `minSamplesForEstimate` is reached. Default 250. */
   initialLatencyEstimateMs?: number;
+  /** Structured logger receiving internal scheduling events; defaults to the no-op logger. */
   logger?: Logger;
 }
 
