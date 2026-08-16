@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: node scripts/check-cross-repo-sync.mjs
+      - run: npm run sync:check
 
       # A red run on a weekly schedule is easy to miss, so confirmed drift
       # also opens (or updates) a tracking issue with the report.

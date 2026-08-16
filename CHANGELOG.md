@@ -1,12 +1,11 @@
 ## [1.0.1](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.0.0...v1.0.1) (2026-08-11)
 
-
 ### Bug Fixes
 
-* **circuit-breaker:** remove unreachable half-open branch ([855fd4b](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/855fd4b396ff3270ca1ed6356490191ac91f5d5a))
-* **deps:** resolve npm audit advisories ([7702dd3](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/7702dd331ad9a86788fbf23b7eeaf78f99b263ad))
-* **fixtures:** preserve generated text formatting ([99ed829](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/99ed8294e0ade76ac0fee73ad13b52f4a2c9583b))
-* **rate-limit:** preserve zero-count bucket joins ([c36920e](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/c36920e9c50232971dbac8337b8bd9ae6cda8b22))
+- **circuit-breaker:** remove unreachable half-open branch ([855fd4b](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/855fd4b396ff3270ca1ed6356490191ac91f5d5a))
+- **deps:** resolve npm audit advisories ([7702dd3](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/7702dd331ad9a86788fbf23b7eeaf78f99b263ad))
+- **fixtures:** preserve generated text formatting ([99ed829](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/99ed8294e0ade76ac0fee73ad13b52f4a2c9583b))
+- **rate-limit:** preserve zero-count bucket joins ([c36920e](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/c36920e9c50232971dbac8337b8bd9ae6cda8b22))
 
 # 1.0.0 (2026-07-30)
 
