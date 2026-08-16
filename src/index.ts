@@ -6,6 +6,7 @@ export {
   CacheStatus,
 } from './RiskOracle';
 export { StubOracle } from './StubOracle';
+export { SorobanOracle, SorobanOracleOptions } from './SorobanOracle';
 export {
   validateDestination,
   encodeAssetCode,
