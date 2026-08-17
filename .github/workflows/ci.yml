@@ -30,6 +30,22 @@ jobs:
       - run: npm run build
       - run: npm run docs:check
 
+  # Local Soroban RPC integration harness (issue #92). The suite starts an
+  # in-process Soroban RPC fixture server on 127.0.0.1, loads a representative
+  # risk-oracle contract fixture, and drives the real get_score RPC boundary —
+  # no external network access required. Kept as a required job separate from
+  # the fast unit suite.
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:integration
+
   commitlint:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

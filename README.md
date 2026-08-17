@@ -53,7 +53,7 @@ stays complete as the public surface grows.
 - **`StubOracle`** — lookup-table score source backed by vendored `grydlock-testkit` fixtures, for local development and the `grydlock-testkit` evaluation; no network calls
 - **`ProvenanceOracle`** — wraps any `RiskOracle` and emits a structured provenance record (source, timestamp, cache status, latency) for every score, via an injectable `Logger`
 - **`Logger` interface** — minimal structured logging seam (`debug`/`info`/`warn`/`error`) with a no-op default; the library never writes to the console on its own
-- **`SorobanOracle`** _(planned)_ — calls `get_score()` on the live on-chain risk oracle contract and returns the result
+- **`SorobanOracle`** — calls `get_score()` on the on-chain risk oracle contract via Soroban RPC and returns the result; verified against a local Soroban RPC integration harness in CI (#92)
 - **Fallback** _(planned)_ — a slow or unreachable oracle degrades gracefully instead of stalling the signing flow
 
 <!-- TODO: expand this list as real implementation features land -->
@@ -69,7 +69,7 @@ graph TB
     subgraph Adapter["grydlock-oracle-adapter"]
         IFACE[RiskOracle interface]
         STUB[StubOracle]
-        SOROBAN[SorobanOracle - planned]
+        SOROBAN[SorobanOracle]
     end
 
     subgraph Chain["Stellar Network"]
@@ -84,13 +84,13 @@ graph TB
 
 ### Core Components
 
-| Component                 | Role                                                                               | Status              |
-| ------------------------- | ---------------------------------------------------------------------------------- | ------------------- |
-| `src/RiskOracle.ts`       | Defines the `getScore(destination)` contract and the `ScoredResult` metadata types | Implemented         |
-| `src/StubOracle.ts`       | Lookup-table score source, backed by vendored `grydlock-testkit` fixtures          | Implemented, tested |
-| `src/ProvenanceOracle.ts` | Decorator that logs a structured provenance record for every score                 | Implemented, tested |
-| `src/Logger.ts`           | Injectable structured `Logger` interface with a no-op default                      | Implemented         |
-| `src/SorobanOracle.ts`    | Live client against the on-chain oracle contract                                   | Not started         |
+| Component                 | Role                                                                                           | Status              |
+| ------------------------- | ---------------------------------------------------------------------------------------------- | ------------------- |
+| `src/RiskOracle.ts`       | Defines the `getScore(destination)` contract and the `ScoredResult` metadata types             | Implemented         |
+| `src/StubOracle.ts`       | Lookup-table score source, backed by vendored `grydlock-testkit` fixtures                      | Implemented, tested |
+| `src/ProvenanceOracle.ts` | Decorator that logs a structured provenance record for every score                             | Implemented, tested |
+| `src/Logger.ts`           | Injectable structured `Logger` interface with a no-op default                                  | Implemented         |
+| `src/SorobanOracle.ts`    | Live client against the on-chain oracle contract; verified against a local Soroban RPC harness | Implemented, tested |
 
 `src/fixtures/testkit/` is a vendored, point-in-time copy of `grydlock-testkit`'s
 `destinations.json` and `scores.json` — not a live sync. If the testkit fixtures change, re-copy
@@ -154,7 +154,7 @@ interface RiskOracle {
 The extension depends on this shape and nothing beneath it. Two implementations are planned:
 
 - **StubOracle** — returns a score from the vendored `grydlock-testkit` fixture lookup table (falling back to a default for unrecognized destinations). Used for development and for the `grydlock-testkit` evaluation. No network.
-- **SorobanOracle** — calls `get_score()` on the live on-chain risk oracle contract and returns the result. Wired in a later phase.
+- **SorobanOracle** — calls `get_score()` on the on-chain risk oracle contract via Soroban RPC and returns the result. Wired to a live testnet contract in a later phase.
 
 ### Destination validation
 
@@ -280,7 +280,7 @@ grydlock-oracle-adapter/
 │   ├── DestinationValidator.ts        ← Destination grammar: G/M/C/L addresses + SEP-11 assets
 │   ├── ProvenanceOracle.ts            ← Decorator emitting a provenance record per score
 │   ├── Logger.ts                      ← Injectable structured Logger interface, no-op default
-│   ├── SorobanOracle.ts               ← Live oracle client (planned, not yet in src/)
+│   ├── SorobanOracle.ts               ← Live oracle client (RPC get_score; local harness-tested)
 │   ├── fixtures/testkit/
 │   │   ├── destinations.json          ← Vendored grydlock-testkit fixture (labelled destinations)
 │   │   ├── scores.json                ← Vendored grydlock-testkit fixture (destination -> score)
@@ -418,12 +418,40 @@ Revisit this once `SorobanOracle` and the resilience features land and there's a
 larger surface — at that point, consider setting `thresholds.break` and/or moving the check into
 the main `ci.yml` pipeline.
 
+## Local Soroban integration harness
+
+`tests/integration/` ships a self-contained Soroban integration suite (issue #92) that
+exercises the adapter's real `get_score` boundary — HTTP + XDR serialization against a Soroban
+RPC-shaped endpoint — with no external network access:
+
+- **`riskOracleFixture.ts`** — a representative risk-oracle contract fixture (`get_score(string)
+-> u32`) backed by the same vendored `grydlock-testkit` scores `StubOracle` uses, so the
+  harness stays in lockstep with the real contract's expected shape.
+- **`sorobanRpcHarness.ts`** — starts a local Soroban RPC fixture server bound to `127.0.0.1`
+  that emulates `simulateTransaction`/`getHealth` and "loads" the fixture contract automatically.
+  Behavior knobs let tests simulate contract reverts, malformed return values, slow responses,
+  and HTTP failures.
+- **`SorobanOracle.integration.test.ts`** — covers valid scores, invalid destinations,
+  unknown destinations, malformed responses, RPC failures, and timeouts.
+
+Run the suite on its own (as CI does, in the required `integration` job):
+
+```bash
+npm run test:integration
+```
+
+The suite is kept separate from the fast unit tests (`npm test`), which still exclude
+`tests/integration/`. Because the fixture server is fully in-process and binds to loopback,
+startup and teardown are deterministic across repeated CI runs, and failures surface as normal
+vitest diagnostics.
+
 ## Roadmap
 
 - [x] Define the `RiskOracle` interface and ship `StubOracle`
 - [x] Back `StubOracle` with vendored `grydlock-testkit` fixtures instead of a hardcoded table
+- [x] Implement `SorobanOracle` and verify it against a local Soroban RPC integration harness + CI contract tests (#92)
 - [ ] Wire `StubOracle` into the extension and confirm the query path end to end on testnet
-- [ ] Implement `SorobanOracle` against a live oracle contract on testnet
+- [ ] Point `SorobanOracle` at a live oracle contract on testnet
 - [ ] Add caching and a timeout / fallback so a slow or unreachable oracle degrades gracefully instead of stalling the signing flow
 
 ## Why This Matters for Gryd Lock
@@ -435,8 +463,8 @@ the main `ci.yml` pipeline.
 ## Dependencies
 
 - TypeScript ^6.0.3, Vitest ^4.1.10, ESLint ^10.6.0 + typescript-eslint ^8.63.0, Prettier ^3.9.4 — see `package.json` for the full, pinned list
-- `@stellar/stellar-sdk` — currently only used by `tests/StrKeyCodec.differential.test.ts` as a reference oracle to fuzz-test `src/StrKeyCodec.ts` against; not imported anywhere in `src/` (destination validation is a from-scratch, dependency-free reimplementation — see that file's doc comment). Will become load-bearing once `SorobanOracle` is implemented.
-- `package.json`'s `overrides.axios` pins `axios` to `^1.18.1`: `@stellar/stellar-sdk` (every release from 15.0.1 through the current 16.0.1) pins an exact, older `axios` version that falls in several since-patched advisories' vulnerable ranges (all fixed in `axios@1.18.0`). Since nothing in `src/` calls into the SDK's HTTP layer yet, overriding carries no runtime risk today; remove this override once the SDK bumps its own `axios` pin upstream.
+- `@stellar/stellar-sdk` — used by `src/SorobanOracle.ts` to build and simulate `get_score` calls against a Soroban RPC endpoint, and by `tests/StrKeyCodec.differential.test.ts` as a reference oracle to fuzz-test `src/StrKeyCodec.ts` against (destination validation itself is a from-scratch, dependency-free reimplementation — see that file's doc comment).
+- `package.json`'s `overrides.axios` pins `axios` to `^1.18.1`: `@stellar/stellar-sdk` (every release from 15.0.1 through the current 16.0.1) pins an exact, older `axios` version that falls in several since-patched advisories' vulnerable ranges (all fixed in `axios@1.18.0`). Now that `SorobanOracle` calls into the SDK's HTTP layer, this override ensures the patched `axios` is actually used at runtime; keep it until the SDK bumps its own `axios` pin upstream.
 
 ## License
 

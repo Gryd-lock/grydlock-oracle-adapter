@@ -21,6 +21,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "size": "node scripts/bundle-size.mjs",
     "generate:fixtures": "node scripts/generate-fixture-text.mjs",
     "docs": "typedoc",
