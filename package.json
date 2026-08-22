@@ -36,6 +36,7 @@
     "test": "vitest run",
     "test:smoke": "node scripts/smoke-test.mjs",
     "size": "node scripts/bundle-size.mjs",
+    "sync:fixtures": "node scripts/sync-testkit-fixtures.mjs",
     "generate:fixtures": "node scripts/generate-fixture-text.mjs",
     "docs": "typedoc",
     "docs:check": "typedoc --emit none",
