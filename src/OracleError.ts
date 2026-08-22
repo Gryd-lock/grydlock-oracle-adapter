@@ -51,6 +51,20 @@ export class OracleTimeoutError extends OracleError {
   }
 }
 
+/**
+ * The request was cancelled via an `AbortSignal` (see
+ * `CancellableRiskOracle`) before it settled. Distinct from
+ * `OracleTimeoutError`: a timeout is this adapter's own budget expiring,
+ * while a cancellation is the caller (or a middleware acting on the
+ * caller's behalf, e.g. `withTimeout` aborting a cancellable inner oracle)
+ * deliberately abandoning the request.
+ */
+export class OracleCancelledError extends OracleError {
+  constructor(message = 'The oracle request was cancelled.', context: OracleErrorContext = {}) {
+    super(message, 'ORACLE_CANCELLED', context);
+  }
+}
+
 /** The supplied destination is invalid. */
 export class InvalidDestinationError extends OracleError {
   constructor(destination: string, context: Omit<OracleErrorContext, 'destination'> = {}) {

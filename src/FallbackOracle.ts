@@ -1,6 +1,8 @@
 import { CircuitBreakerState } from './CircuitBreakerOracle';
 import { CacheStatus, DetailedRiskOracle, RiskOracle, ScoredResult } from './RiskOracle';
 import { FallbackObserver } from './FallbackObserver';
+import { CancellableRiskOracle, isCancellable, raceWithCancellation } from './CancellableRiskOracle';
+import { OracleCancelledError } from './OracleError';
 
 /**
  * Discounted-UCB belief for a single tier: a discounted pull count and a
@@ -130,8 +132,20 @@ function isDetailed(oracle: RiskOracle): oracle is DetailedRiskOracle {
  * there is no separate skip decision. A tier that looks dead still gets a `UNEXPLORED_PRIORITY`-
  * or bonus-driven turn once its exploration term grows large enough, which is what guarantees
  * eventual recovery detection without a hand-rolled retry timer.
+ *
+ * ## Cancellation (issue #98)
+ *
+ * `getScoreCancellable` tries tiers in the same bandit-ranked order as
+ * `route`, but a cancellation during any tier's attempt aborts the whole
+ * chain immediately — it is not treated as that tier merely failing, so it
+ * never falls through to the next tier, and it is not fed into the bandit
+ * as learning evidence either way (a caller changing its mind isn't
+ * evidence about the tier's health). A tier that itself implements
+ * `CancellableRiskOracle` has its own underlying request actually aborted;
+ * a tier that doesn't still lets the caller bail out immediately without
+ * waiting for it, exactly like `CircuitBreakerOracle`'s CLOSED path.
  */
-export class FallbackOracle implements DetailedRiskOracle {
+export class FallbackOracle implements DetailedRiskOracle, CancellableRiskOracle {
   private readonly beliefs: TierBelief[];
   private readonly labels: string[];
   private readonly explorationFactor: number;
@@ -161,6 +175,15 @@ export class FallbackOracle implements DetailedRiskOracle {
    */
   async getScoreDetailed(destination: string): Promise<FallbackScoredResult> {
     return this.route(destination);
+  }
+
+  /**
+   * Cancellable counterpart to {@link getScore} — see the class doc's
+   * "Cancellation" section.
+   */
+  async getScoreCancellable(destination: string, signal: AbortSignal): Promise<number> {
+    const result = await this.routeCancellable(destination, signal);
+    return result.score;
   }
 
   /** Decays every tier's belief one round, then ranks tiers richest-first by UCB index. */
@@ -248,6 +271,95 @@ export class FallbackOracle implements DetailedRiskOracle {
           answeredTierIndex: decision.tierIndex,
         };
       } catch (error) {
+        lastError = error;
+        this.observer?.onFallback(error, oracle);
+
+        decision.outcome = 'failure';
+        decision.learned = learnsFromThisAttempt;
+        if (learnsFromThisAttempt) {
+          belief.discountedPulls += 1;
+        }
+      }
+    }
+
+    if (lastError instanceof Error) {
+      Object.assign(lastError, { routingOrder: decisions } satisfies Pick<
+        FallbackScoredResult,
+        'routingOrder'
+      >);
+    }
+    throw lastError;
+  }
+
+  /**
+   * Cancellable counterpart to {@link route} — see the class doc's
+   * "Cancellation" section. Deliberately not folded into `route` itself:
+   * the two share tier ranking (`rankTiers`) and belief bookkeeping shape,
+   * but their control flow around a tier's outcome diverges (cancellation
+   * must abort the whole chain rather than fall through, and must never be
+   * recorded as belief evidence), which would make a single merged method
+   * harder to follow than the duplication here.
+   */
+  private async routeCancellable(
+    destination: string,
+    signal: AbortSignal,
+  ): Promise<FallbackScoredResult> {
+    if (this.chain.length === 0) {
+      throw new Error('FallbackOracle has no configured oracles.');
+    }
+    if (signal.aborted) {
+      throw new OracleCancelledError('The oracle request was cancelled.', { destination });
+    }
+
+    const decisions = this.rankTiers();
+    let lastError: unknown;
+
+    for (const decision of decisions) {
+      if (signal.aborted) {
+        throw new OracleCancelledError('The oracle request was cancelled.', { destination });
+      }
+
+      const oracle = this.chain[decision.tierIndex];
+      const belief = this.beliefs[decision.tierIndex];
+      const stateBefore = hasCircuitBreakerState(oracle) ? oracle.getState() : undefined;
+      const learnsFromThisAttempt = stateBefore !== CircuitBreakerState.OPEN;
+      decision.attempted = true;
+
+      try {
+        const score = isCancellable(oracle)
+          ? await oracle.getScoreCancellable(destination, signal)
+          : await raceWithCancellation(oracle.getScore(destination), signal, destination);
+        // Detailed cacheStatus is not available through the cancellable
+        // path (CancellableRiskOracle has no detailed variant); defaults
+        // to 'live', matching route()'s own default for non-detailed tiers.
+        const cacheStatus: CacheStatus = 'live';
+
+        decision.outcome = 'success';
+        decision.learned = learnsFromThisAttempt;
+        if (learnsFromThisAttempt) {
+          belief.discountedPulls += 1;
+          belief.discountedSuccesses += 1;
+        }
+
+        return {
+          score,
+          timestamp: Date.now(),
+          source: decision.label,
+          cacheStatus,
+          confidence:
+            belief.discountedPulls < MIN_DISCOUNTED_PULLS
+              ? undefined
+              : belief.discountedSuccesses / belief.discountedPulls,
+          routingOrder: decisions,
+          answeredTierIndex: decision.tierIndex,
+        };
+      } catch (error) {
+        if (error instanceof OracleCancelledError) {
+          // Abort the whole chain: a cancellation is not this tier failing,
+          // and is not evidence about any tier's health either way.
+          throw error;
+        }
+
         lastError = error;
         this.observer?.onFallback(error, oracle);
 

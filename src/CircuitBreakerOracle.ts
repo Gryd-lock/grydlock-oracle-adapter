@@ -1,4 +1,6 @@
 import { RiskOracle } from './RiskOracle';
+import { CancellableRiskOracle, isCancellable, raceWithCancellation } from './CancellableRiskOracle';
+import { OracleCancelledError } from './OracleError';
 
 /** Lifecycle state of a {@link CircuitBreakerOracle}. */
 export enum CircuitBreakerState {
@@ -64,8 +66,24 @@ export function defaultIsInfrastructureError(error: unknown): boolean {
  *   *that probe's outcome* (success/failure, i.e. the resulting breaker
  *   state) and then issue their own call against the freshly-settled state,
  *   rather than reusing the probe's resolved value.
+ *
+ * ## Cancellation (issue #98)
+ *
+ * `getScoreCancellable`'s CLOSED-state path genuinely owns its underlying
+ * call (mirroring plain `getScore`'s CLOSED path), so a caller cancelling
+ * there actually frees the resource. The HALF_OPEN probe is different: it
+ * is the single shared resource INV-CB-1 exists to protect, and it may be
+ * awaited by several callers (the one that claimed the slot and any later
+ * arrivals) — no single caller cancelling is allowed to tear it down out
+ * from under the others. So a caller's own cancellation while claiming or
+ * waiting on the probe only unblocks *that caller* early with
+ * `OracleCancelledError`; the probe itself (and `runProbe`) is unchanged
+ * and keeps running to completion, still driving the breaker's state
+ * transition from its real outcome. A cancelled CLOSED-path call is never
+ * recorded as an infrastructure failure — see the `OracleCancelledError`
+ * check before `isInfraError` below.
  */
-export class CircuitBreakerOracle implements RiskOracle {
+export class CircuitBreakerOracle implements RiskOracle, CancellableRiskOracle {
   private state: CircuitBreakerState = CircuitBreakerState.CLOSED;
   private failures: number = 0;
   private nextAttempt: number = 0;
@@ -130,6 +148,52 @@ export class CircuitBreakerOracle implements RiskOracle {
 
       // Non-infrastructure errors indicate the system is logically
       // reachable; nothing to do to CLOSED-state bookkeeping.
+      throw error;
+    }
+  }
+
+  /**
+   * Cancellable counterpart to {@link getScore} — see the class doc's
+   * "Cancellation" section for what is and isn't actually abortable here.
+   */
+  public async getScoreCancellable(destination: string, signal: AbortSignal): Promise<number> {
+    if (signal.aborted) {
+      throw new OracleCancelledError('The oracle request was cancelled.', { destination });
+    }
+
+    if (this.state === CircuitBreakerState.OPEN) {
+      if (Date.now() < this.nextAttempt) {
+        return raceWithCancellation(this.handleFallback(destination), signal, destination);
+      }
+
+      // Same synchronous claim as getScore's OPEN branch (INV-CB-2): no
+      // await between the eligibility check and this mutation.
+      this.state = CircuitBreakerState.HALF_OPEN;
+      this.halfOpenProbe = this.runProbe(destination);
+      return raceWithCancellation(this.halfOpenProbe, signal, destination);
+    }
+
+    if (this.state === CircuitBreakerState.HALF_OPEN) {
+      await raceWithCancellation(this.halfOpenProbe!.catch(() => undefined), signal, destination);
+      return this.getScoreCancellable(destination, signal);
+    }
+
+    // CLOSED: this call genuinely owns its underlying request, so
+    // cancellation here actually frees the resource rather than merely
+    // detaching interest.
+    try {
+      const score = isCancellable(this.oracle)
+        ? await this.oracle.getScoreCancellable(destination, signal)
+        : await raceWithCancellation(this.oracle.getScore(destination), signal, destination);
+      return score;
+    } catch (error) {
+      if (error instanceof OracleCancelledError) {
+        throw error;
+      }
+      if (this.isInfraError(error)) {
+        this.recordFailure();
+        return this.handleFallback(destination, error);
+      }
       throw error;
     }
   }
