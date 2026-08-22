@@ -1,14 +1,10 @@
 import { RiskOracle } from '../RiskOracle';
 import { OracleMiddleware } from '../OracleMiddleware';
+import { OracleTimeoutError } from '../OracleError';
 
-/** Thrown by {@link withTimeout} when the wrapped call exceeds its budget. */
-export class OracleTimeoutError extends Error {
-  constructor(destination: string, timeoutMs: number) {
-    super(`getScore("${destination}") timed out after ${timeoutMs}ms`);
-    this.name = 'OracleTimeoutError';
-  }
-}
+export { OracleTimeoutError };
 
+/** Construction options for {@link withTimeout}. */
 export interface TimeoutOptions {
   /** Maximum time a single getScore call may take, in milliseconds. */
   timeoutMs: number;
@@ -18,6 +14,14 @@ export interface TimeoutOptions {
  * Timeout middleware (issue #7), built on the shared middleware abstraction
  * (#46). Rejects with {@link OracleTimeoutError} if the next oracle does not
  * settle within the budget.
+ *
+ * The timeout failure reuses the shared error taxonomy in `OracleError.ts`
+ * (rather than a private duplicate) so consumers can catch a single
+ * `OracleTimeoutError` type — `instanceof OracleError` holds and the stable
+ * `ORACLE_TIMEOUT` code is available — while the thrown message keeps the
+ * destination and budget detail this middleware always carried. This module
+ * re-exports the class so existing deep imports of
+ * `./middleware/withTimeout` continue to resolve.
  *
  * Recommended position: innermost, directly around the raw oracle, so the
  * budget bounds exactly one underlying attempt — with retry (#10) outside,
@@ -39,7 +43,12 @@ export function withTimeout(options: TimeoutOptions): OracleMiddleware {
           inner,
           new Promise<never>((_, reject) => {
             timer = setTimeout(
-              () => reject(new OracleTimeoutError(destination, timeoutMs)),
+              () =>
+                reject(
+                  new OracleTimeoutError(
+                    `getScore("${destination}") timed out after ${timeoutMs}ms`,
+                  ),
+                ),
               timeoutMs,
             );
           }),

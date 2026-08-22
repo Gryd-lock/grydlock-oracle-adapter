@@ -34,8 +34,10 @@ export type OracleMiddleware<
  * handed to it at the base — i.e. the required input type of the LAST
  * (innermost, right-most) middleware in the list, since that is the one
  * `compose` applies directly to the base oracle.
+ *
+ * Exported because {@link compose}'s signature is defined in terms of it.
  */
-type InnermostIn<Ms extends readonly OracleMiddleware[]> = Ms extends readonly [
+export type InnermostIn<Ms extends readonly OracleMiddleware[]> = Ms extends readonly [
   infer Only extends OracleMiddleware,
 ]
   ? Only extends OracleMiddleware<infer TIn extends RiskOracle, RiskOracle>
@@ -53,8 +55,10 @@ type InnermostIn<Ms extends readonly OracleMiddleware[]> = Ms extends readonly [
  * declares it needs as `next`; this is exactly how the array's actual
  * element types (not a fixed 2- or 3-argument special case) determine
  * whether the final result is `DetailedRiskOracle` or only `RiskOracle`.
+ *
+ * Exported because {@link compose}'s signature is defined in terms of it.
  */
-type ChainOut<Ms extends readonly OracleMiddleware[]> = Ms extends readonly [
+export type ChainOut<Ms extends readonly OracleMiddleware[]> = Ms extends readonly [
   infer Only extends OracleMiddleware,
 ]
   ? Only extends OracleMiddleware<never, infer TOut extends RiskOracle>

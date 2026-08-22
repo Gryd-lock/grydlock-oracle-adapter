@@ -8,8 +8,11 @@ import { DetailedRiskOracle, RiskOracle } from './RiskOracle';
  * (length and per-index element types), rather than distributing over
  * `length`/`push`/etc. the way a naive `keyof` mapped type would for a
  * non-array object type.
+ *
+ * Exported because {@link AllDetailed} is defined in terms of it; consumers
+ * normally use {@link AllDetailed} directly.
  */
-type ElementIsDetailed<T extends readonly RiskOracle[]> = {
+export type ElementIsDetailed<T extends readonly RiskOracle[]> = {
   [K in keyof T]: T[K] extends DetailedRiskOracle ? true : false;
 };
 

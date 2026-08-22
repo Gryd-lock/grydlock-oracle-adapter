@@ -7,9 +7,15 @@
 export interface RiskOracle {
   /**
    * @param destination A Stellar address or asset identifier.
+   * @param options Optional caller-supplied controls. Middleware implementations
+   *   may ignore these (the canonical middleware stack handles timeout and cache
+   *   separately). Extension callers use them to control fetch behaviour.
    * @returns A risk score between 0 and 100 (inclusive).
    */
-  getScore(destination: string): Promise<number>;
+  getScore(
+    destination: string,
+    options?: { timeoutMs?: number; signal?: AbortSignal; bypassCache?: boolean },
+  ): Promise<number>;
 }
 
 /**
@@ -54,8 +60,12 @@ export interface ScoredResult {
 export interface DetailedRiskOracle extends RiskOracle {
   /**
    * @param destination A Stellar address or asset identifier.
+   * @param options Optional caller-supplied controls (see {@link RiskOracle.getScore}).
    * @returns The same score `getScore` would resolve, plus the metadata
    * needed to judge how much to trust it.
    */
-  getScoreDetailed(destination: string): Promise<ScoredResult>;
+  getScoreDetailed(
+    destination: string,
+    options?: { timeoutMs?: number; signal?: AbortSignal; bypassCache?: boolean },
+  ): Promise<ScoredResult>;
 }

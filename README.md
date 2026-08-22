@@ -325,10 +325,39 @@ const logger: Logger = {
   error: (message, meta) => console.error(message, meta),
 };
 
-const oracle = new CoalescingOracle(new StubOracle(logger), logger);
+const oracle = new CoalescingOracle(new StubOracle(), logger);
 
 const score = await oracle.getScore('GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET'); // 95, labelled "malicious" in grydlock-testkit
 ```
+
+The imports above come from the package entry point (`src/index.ts`), which also
+exports the other oracle implementations (`DefaultOracle`, `CircuitBreakerOracle`,
+`FallbackOracle`, `RiskOracleAggregator`), the error taxonomy (`OracleError` and its
+subclasses), and the `withCache` / `withTimeout` / `withProvenance` / `withRateLimit`
+middleware.
+
+### Composing cross-cutting concerns
+
+The middleware compose through `compose` (or by hand, since each one is a plain
+`(next: RiskOracle) => RiskOracle` wrapper). The FIRST middleware listed is the
+OUTERMOST layer — it sees the caller's `getScore` first and its result last, exactly
+like reading the list top-to-bottom as layers around the oracle:
+
+```ts
+import { compose, withCache, withTimeout, withProvenance, StubOracle } from './src';
+
+const oracle = compose(
+  withCache({ ttlMs: 30_000 }), // outermost: a cache hit skips everything below
+  withProvenance(), // emits one score_provenance record per call
+  withTimeout({ timeoutMs: 1_500 }), // innermost: bounds the raw call
+)(new StubOracle());
+```
+
+The recommended production order puts `withCache` outermost (so hits skip every other
+concern), `withProvenance` next (so the provenance record reflects cached serves),
+then `withRateLimit`, with `withTimeout` innermost directly around the raw oracle so
+each underlying attempt gets its own budget. `compose`'s result type reflects exactly
+which layers preserve or add `getScoreDetailed`.
 
 ## Tech Stack
 
@@ -352,8 +381,8 @@ Covers:
 ## Bundle Size & Tree-Shaking
 
 Because this package ships inside a browser extension (`grydlock-extension`), its footprint
-directly affects extension load time and web-store review. CI enforces both a size budget and
-tree-shaking behavior on every PR:
+directly affects extension load time and web-store review. `npm run size` enforces both a
+size budget and tree-shaking behavior:
 
 ```bash
 npm run size
@@ -363,12 +392,12 @@ The check (`scripts/bundle-size.mjs`) bundles the package with esbuild (minified
 TypeScript source — the same consumption path the extension's bundler will use once the ESM
 build output from #37 lands) for representative import patterns:
 
-| Import pattern                   | Current size (minified) | Budget |
-| -------------------------------- | ----------------------- | ------ |
-| `import { StubOracle }` only     | ~0.8 KB (~0.6 KB gzip)  | 5 KB   |
-| Full barrel (`export * from ..`) | ~0.8 KB (~0.6 KB gzip)  | 10 KB  |
+| Import pattern                   | Current size (minified)  | Budget |
+| -------------------------------- | ------------------------ | ------ |
+| `import { StubOracle }` only     | ~9.6 KB (~3.9 KB gzip)   | 10 KB  |
+| Full barrel (`export * from ..`) | ~30.2 KB (~10.9 KB gzip) | 40 KB  |
 
-Two things fail CI:
+Two things fail the check:
 
 - **Budget regression** — a pattern's minified size exceeds its budget. If the growth is
   intentional (a real feature), raise the budget in `scripts/bundle-size.mjs` in the same PR
@@ -380,7 +409,7 @@ Two things fail CI:
   (no module-level side effects) or the check fails.
 
 **For extension-side contributors:** the "StubOracle only" row is the integration cost of the
-current recommended usage — under 1 KB gzipped added to the extension bundle.
+current recommended usage — under 4 KB gzipped added to the extension bundle.
 
 ### Mutation testing
 
@@ -667,5 +696,9 @@ _Part of the Gryd Lock project. Interface defined, live oracle not yet wired._
 | InvalidDestinationError      | INVALID_DESTINATION      | The supplied Stellar destination is invalid.          | Malformed address or asset identifier  |
 | UnrecognizedDestinationError | UNRECOGNIZED_DESTINATION | The destination is valid but not recognized.          | Destination not present in oracle data |
 | ContractIncompatibilityError | CONTRACT_INCOMPATIBILITY | The adapter is incompatible with the oracle contract. | ABI/version mismatch                   |
+
+All of the above (plus the base `OracleError` and `QuorumNotMetError`) are exported from the
+package entry point (`src/index.ts`). Prefer `instanceof` or the `code` field over parsing
+error messages.
 
 </div>

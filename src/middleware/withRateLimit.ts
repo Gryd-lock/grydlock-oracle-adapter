@@ -51,6 +51,7 @@ export interface BroadcastChannelLike {
   close?(): void;
 }
 
+/** Construction options for {@link withRateLimit}. */
 export interface RateLimitOptions {
   /** Max requests admitted, combined across every context sharing this
    * channel, within any trailing `windowMs` window. */

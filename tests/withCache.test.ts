@@ -109,7 +109,13 @@ describe('withCache', () => {
 
   it('evicts the oldest-cached destination past maxEntries', async () => {
     const { oracle, callCount } = countingOracle(() => 1);
-    const cached = withCache({ ttlMs: 10_000, maxEntries: 2 })(oracle);
+    // A fixed clock keeps every destination's measured costMs at exactly 0,
+    // so eviction order is decided purely by GreedyDual's recency term (see
+    // the module doc: uniform cost/confidence degenerates to LRU order).
+    // Without this, real Date.now()'s millisecond resolution can spuriously
+    // measure one destination's fetch as costlier than the others', which
+    // is enough to flip which entry the cost-aware policy protects.
+    const cached = withCache({ ttlMs: 10_000, maxEntries: 2, now: () => 0 })(oracle);
 
     await cached.getScore('GA');
     await cached.getScore('GB');
@@ -122,6 +128,26 @@ describe('withCache', () => {
 
     await cached.getScore('GA'); // was evicted → refetch
     expect(callCount()).toBe(4);
+  });
+
+  it('serves many concurrent hits to already-cached destinations without extra oracle calls', async () => {
+    const { oracle, callCount } = countingOracle((d) => d.length);
+    const cached = withCache({ ttlMs: 1000, maxEntries: 3, now: () => 0 })(oracle);
+
+    await cached.getScore('GA');
+    await cached.getScore('GB');
+    await cached.getScore('GC');
+    expect(callCount()).toBe(3);
+
+    // Fired together (no await between them), so every one of these takes
+    // the synchronous cache-hit branch in getScoreDetailedImpl — which reads
+    // the entry and decides freshness before any oracle call's promise can
+    // settle — regardless of how the runtime interleaves them afterward.
+    const destinations = ['GA', 'GB', 'GC', 'GA', 'GB', 'GC', 'GA', 'GB', 'GC'];
+    const results = await Promise.all(destinations.map((d) => cached.getScore(d)));
+
+    expect(results).toEqual(destinations.map((d) => d.length));
+    expect(callCount()).toBe(3); // no new oracle calls from the concurrent hits
   });
 
   it('keeps caches independent across wrapped oracles', async () => {
@@ -324,6 +350,70 @@ describe('withCache: GreedyDual eviction signal isolation', () => {
     await cached.getScore('GA'); // still cached
     expect(callCount()).toBe(4);
     await cached.getScore('GB'); // was evicted → refetch
+    expect(callCount()).toBe(5);
+  });
+
+  it('stale heap nodes left behind by repeated touches cannot evict the current entry', async () => {
+    // A low-h node only exercises the lazy-deletion version check if it is
+    // actually the one popped first — which requires it to be the heap's
+    // *minimum*, i.e. lower than the entry's own current, real h. So this
+    // strands a LOW-h node for A (from when A was cheap), then updates A's
+    // real state to a HIGH h via stale-while-revalidate (same mechanism as
+    // the "fluctuating cost/confidence" test below), leaving that old low-h
+    // node sitting in the heap as the min-heap's actual minimum by the time
+    // eviction runs. A version check that's missing or broken would pop that
+    // stale node, wrongly treat it as still representing A, and evict A —
+    // even though A's real, current h says it should be the one protected.
+    const clock = manualClock();
+    const config: Record<string, { cost: number; confidence?: number; score?: number }> = {
+      A: { cost: 1, confidence: 1 },
+      FILLER: { cost: 1, confidence: 1 },
+      // Deliberately not tied with FILLER's cost: C only needs to be the
+      // third entry that pushes size past maxEntries and forces an
+      // eviction pass — it must not also be a candidate for that eviction,
+      // or the FILLER-vs-C tie (both cost 1, L unchanged since neither has
+      // been evicted from yet) would make the outcome heap-structure-
+      // dependent instead of the deterministic "FILLER is cheapest" this
+      // test relies on.
+      C: { cost: 50, confidence: 1 },
+    };
+    const { oracle, callCount } = configuredOracle(clock, config);
+    const cached = withCache({
+      ttlMs: 100,
+      staleMs: 1_000_000, // long grace window: A stays stale-servable throughout
+      maxEntries: 2,
+      costAlpha: 1, // fully adopt each new measurement — no EMA blending, for determinism
+      now: clock.now,
+    })(oracle);
+
+    await cached.getScore('A'); // low-cost fetch: A's h starts low
+    await cached.getScore('FILLER'); // also low-cost; size=2, at capacity
+
+    clock.advance(150); // push A past its fresh window into stale
+
+    // Mutate A's profile before the stale hit below, whose background
+    // revalidation reads this config synchronously (no await happens inside
+    // configuredOracle before the read) — see the "fluctuating" test for why
+    // the mutation must land before that call, not after it.
+    config.A = { cost: 1000, confidence: 1 };
+
+    const staleHit = await cached.getScoreDetailed('A');
+    expect(staleHit.cacheStatus).toBe('cache-stale');
+
+    // Let the revalidation resolve: A's entry now has a genuinely high h
+    // (cost 1000), while its earlier low-h node(s) — pushed by the initial
+    // fetch and by the stale hit itself — are stranded, unpopped, in the
+    // heap.
+    await flushMicrotasks();
+
+    await cached.getScore('C'); // fetch: forces eviction with A's stale low-h node(s) present
+    expect(callCount()).toBe(4); // A(fetch) + FILLER(fetch) + A(revalidation) + C(fetch)
+
+    await cached.getScore('A'); // must still be cached — protected by its real, high current h
+    expect(callCount()).toBe(4);
+    await cached.getScore('C'); // still cached
+    expect(callCount()).toBe(4);
+    await cached.getScore('FILLER'); // was genuinely evicted (the real cheapest entry) → refetch
     expect(callCount()).toBe(5);
   });
 

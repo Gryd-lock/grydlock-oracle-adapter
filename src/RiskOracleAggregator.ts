@@ -120,6 +120,14 @@ export function weightedMedian(values: readonly number[], weights: readonly numb
   return values[order[order.length - 1]];
 }
 
+/** The honest-range clamp for a Byzantine-robust aggregate. */
+export interface OrderBounds {
+  /** Lower bound: the `(faultTolerance + 1)`-th smallest reported value. */
+  lo: number;
+  /** Upper bound: the `(faultTolerance + 1)`-th largest reported value. */
+  hi: number;
+}
+
 /**
  * The interval that any Byzantine-robust aggregate must be clamped into to
  * guarantee it falls within the honest sources' `[min, max]` range.
@@ -142,10 +150,7 @@ export function weightedMedian(values: readonly number[], weights: readonly numb
  * must be `>= 2 * faultTolerance + 1` for the bounds to be meaningful).
  * @param faultTolerance Maximum number of Byzantine values assumed among `values`.
  */
-export function honestOrderBounds(
-  values: readonly number[],
-  faultTolerance: number,
-): { lo: number; hi: number } {
+export function honestOrderBounds(values: readonly number[], faultTolerance: number): OrderBounds {
   const sorted = [...values].sort((a, b) => a - b);
   const loIndex = Math.min(faultTolerance, sorted.length - 1);
   const hiIndex = Math.max(sorted.length - 1 - faultTolerance, 0);

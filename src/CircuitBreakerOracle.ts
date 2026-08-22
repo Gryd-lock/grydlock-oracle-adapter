@@ -1,18 +1,28 @@
 import { RiskOracle } from './RiskOracle';
 
+/** Lifecycle state of a {@link CircuitBreakerOracle}. */
 export enum CircuitBreakerState {
+  /** Normal operation: every call is passed through to the wrapped oracle. */
   CLOSED = 'CLOSED',
+  /** Tripped: calls short-circuit to the configured fallback (or throw) until the cooldown elapses. */
   OPEN = 'OPEN',
+  /** Cooldown elapsed: exactly one probe call is admitted to test whether the oracle recovered. */
   HALF_OPEN = 'HALF_OPEN',
 }
 
+/** Construction options for {@link CircuitBreakerOracle}. */
 export interface CircuitBreakerConfig {
+  /** Number of infrastructure failures that trips the breaker to OPEN. */
   failureThreshold: number;
+  /** Milliseconds the breaker stays OPEN before allowing a HALF_OPEN probe. */
   cooldownWindow: number;
+  /** Value or producer served while OPEN; if omitted, the original failure is rethrown. */
   fallback?: ((destination: string) => Promise<number>) | Error;
+  /** Classifies an error as infrastructure-related (counts toward the threshold). Defaults to {@link defaultIsInfrastructureError}. */
   isInfrastructureError?: (error: unknown) => boolean;
 }
 
+/** Default infrastructure-error classifier: matches network/timeout/RPC-flavored messages and error names. */
 export function defaultIsInfrastructureError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const { message, name: errorName } = error as { message?: string; name?: string };
@@ -74,6 +84,7 @@ export class CircuitBreakerOracle implements RiskOracle {
     this.isInfraError = config.isInfrastructureError || defaultIsInfrastructureError;
   }
 
+  /** @returns The breaker's current {@link CircuitBreakerState}. */
   public getState(): CircuitBreakerState {
     return this.state;
   }

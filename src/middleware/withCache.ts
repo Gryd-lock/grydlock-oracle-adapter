@@ -8,6 +8,7 @@ import {
 import { OracleMiddleware } from '../OracleMiddleware';
 import { Logger, noopLogger } from '../Logger';
 
+/** Construction options for {@link withCache}. */
 export interface CacheOptions {
   /** How long a cached score is served as fresh ('cache-fresh'), in milliseconds. */
   ttlMs: number;

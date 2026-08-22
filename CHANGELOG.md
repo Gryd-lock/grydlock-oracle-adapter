@@ -1,3 +1,18 @@
+# [1.1.0](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.0.2...v1.1.0) (2026-08-20)
+
+
+### Features
+
+* **api:** align public exports with documented package API ([ecc66de](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/ecc66de8580e3633b3c09545390083653c4a2758))
+
+## [1.0.2](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.0.1...v1.0.2) (2026-08-20)
+
+
+### Bug Fixes
+
+* make the stale-heap-node test actually exercise the version check ([abbeba1](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/abbeba159864c659dcaf74a20aa77a739b849110))
+* use deterministic clock in maxEntries eviction test ([f5418a0](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/f5418a061adfdc2af47e6a4ba089462f8ae3a599))
+
 ## [1.0.1](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.0.0...v1.0.1) (2026-08-11)
 
 

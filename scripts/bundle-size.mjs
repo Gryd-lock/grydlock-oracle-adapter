@@ -54,8 +54,11 @@ const CHECKS = [
   {
     name: 'full barrel',
     entry: `export * from './src/index.ts';`,
-    // Raised from 10 KB in #68, for the same reason as above.
-    budgetBytes: 14 * KB,
+    // Raised from 14 KB in #97: the barrel now exports the full public surface
+    // (all oracle implementations, error taxonomy, and the cache/timeout/
+    // provenance/rate-limit middleware), so the "everything" pattern bundles
+    // those modules too. Measured ~30.2 KB minified at the time of the raise.
+    budgetBytes: 40 * KB,
     allowedInputs: null, // the whole package — no allowlist to enforce
   },
 ];
