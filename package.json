@@ -14,14 +14,27 @@
     "risk-oracle",
     "gryd-lock"
   ],
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.typetest.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:smoke": "node scripts/smoke-test.mjs",
     "size": "node scripts/bundle-size.mjs",
     "generate:fixtures": "node scripts/generate-fixture-text.mjs",
     "docs": "typedoc",
@@ -35,6 +48,12 @@
     "@commitlint/config-conventional": "^21.2.0",
     "@cyclonedx/cyclonedx-npm": "^6.0.0",
     "@eslint/js": "^10.0.1",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/typescript-checker": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
@@ -44,6 +63,7 @@
     "husky": "^9.1.7",
     "license-checker-rseidelsohn": "^4.4.2",
     "prettier": "^3.9.4",
+    "semantic-release": "^25.0.9",
     "typedoc": "^0.28.20",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.63.0",

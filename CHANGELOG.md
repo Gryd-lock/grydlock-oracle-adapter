@@ -1,3 +1,28 @@
+# [1.2.0](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.1.0...v1.2.0) (2026-08-22)
+
+
+### Bug Fixes
+
+* avoid a duplicate real call when a non-cancellable inner's request outlives full cancellation ([780d978](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/780d978face028b53aa5b4577445eb88652f8a3f))
+* correct the HALF_OPEN probe mock in its own cancellation test ([9ba66e3](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/9ba66e3eac739f09b24c51904f4df65fe1191204))
+* declare timer as const in getScoreCancellable to satisfy prefer-const ([23b3125](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/23b31257de34910e9e822fe63ef12dc57ed04d37))
+* drop type-only AllDetailed from smoke-test runtime export check ([6826c5d](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/6826c5d55a511a8f53b73d03ec3c1029f0b052a6))
+* drop unused process global from build.mjs's eslint directive ([ea26ef7](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/ea26ef79f0de43ebc15b92f688fe1961f8618f35))
+* export OracleCancelledError from the barrel alongside the rest of the error taxonomy ([ab864b8](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/ab864b8c580a53f7f4af3ae123ee5e39997dfa10))
+* make withTimeout's own output cancellable so composition propagates through it ([c440a8d](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/c440a8dcf468560679862986bf49d7d91fd72272))
+* race the OPEN-state fallback path against the cancellation signal ([2dbe022](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/2dbe022521178e44aead547d7b1e676db59df5d5))
+* reconcile smoke-test's expected exports with the merged public-api-surface barrel ([9174ea3](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/9174ea3775212e8b241f7a6691b1bc1eb5ccb808))
+* settle withTimeout's promise before abort so timeout wins the race ([8476fab](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/8476fabd43dbe70aa9db8c4fd82c2b03d5d9f024))
+* write dist package.json type markers, avoid DEP0190, parallelize builds ([96e8b24](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/96e8b248b90972b25c0fcfd116caa07d3d408114))
+
+
+### Features
+
+* add cancellable coalescing with abort-only-when-all-callers-cancel ([1d5887d](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/1d5887d11292a4bd07027525cd3a81d43e00cb55))
+* add cancellation support to CircuitBreakerOracle, preserving HALF_OPEN single-flight ([a126113](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/a126113f8d387ea5e1861834009b69c0f13839e1))
+* add cancellation support to FallbackOracle's tier chain ([ff199b0](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/ff199b021aa2a0400cfbbaffd007a624d27c3e50))
+* add optional cancellation contract and wire it into withTimeout ([9dc3d61](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/9dc3d61f7aef94f83eea023b1356e8cc1ce4302b))
+
 # [1.1.0](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.0.2...v1.1.0) (2026-08-20)
 
 
@@ -15,13 +40,12 @@
 
 ## [1.0.1](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.0.0...v1.0.1) (2026-08-11)
 
-
 ### Bug Fixes
 
-* **circuit-breaker:** remove unreachable half-open branch ([855fd4b](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/855fd4b396ff3270ca1ed6356490191ac91f5d5a))
-* **deps:** resolve npm audit advisories ([7702dd3](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/7702dd331ad9a86788fbf23b7eeaf78f99b263ad))
-* **fixtures:** preserve generated text formatting ([99ed829](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/99ed8294e0ade76ac0fee73ad13b52f4a2c9583b))
-* **rate-limit:** preserve zero-count bucket joins ([c36920e](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/c36920e9c50232971dbac8337b8bd9ae6cda8b22))
+- **circuit-breaker:** remove unreachable half-open branch ([855fd4b](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/855fd4b396ff3270ca1ed6356490191ac91f5d5a))
+- **deps:** resolve npm audit advisories ([7702dd3](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/7702dd331ad9a86788fbf23b7eeaf78f99b263ad))
+- **fixtures:** preserve generated text formatting ([99ed829](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/99ed8294e0ade76ac0fee73ad13b52f4a2c9583b))
+- **rate-limit:** preserve zero-count bucket joins ([c36920e](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/c36920e9c50232971dbac8337b8bd9ae6cda8b22))
 
 # 1.0.0 (2026-07-30)
 

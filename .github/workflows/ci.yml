@@ -27,7 +27,9 @@ jobs:
       - run: npm run lint
       - run: npm run format:check || npm run format
       - run: npm test
+      - run: npm run size
       - run: npm run build
+      - run: npm run test:smoke
       - run: npm run docs:check
 
   # Local Soroban RPC integration harness (issue #92). The suite starts an
@@ -76,6 +78,6 @@ jobs:
           name: sbom
           path: sbom/bom.json
       # Fail CI on disallowed vulnerability severities (high/critical).
-      - run: npm audit --audit-level=high
+      - run: npm audit --audit-level=high --omit=dev
       # Enforce license allowlist/denylist.
       - run: npm run license-check

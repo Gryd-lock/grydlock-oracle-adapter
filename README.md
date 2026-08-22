@@ -267,7 +267,7 @@ grydlock-oracle-adapter/
 ├── stryker.config.json               ← Mutation testing config (src/ tree)
 │
 ├── .husky/commit-msg                 ← Local commit-msg hook, runs commitlint
-├── .github/workflows/ci.yml          ← CI: typecheck, lint, format check, test, build, bundle size, commitlint
+├── .github/workflows/ci.yml          ← CI: typecheck, lint, format check, test, bundle size, build, smoke tests, commitlint
 │
 ├── scripts/
 │   ├── bundle-size.mjs                ← esbuild-based bundle-size budget + tree-shaking check
@@ -275,12 +275,28 @@ grydlock-oracle-adapter/
 │
 ├── src/
 │   ├── RiskOracle.ts                  ← Interface definition + ScoredResult metadata types
+│   ├── AllDetailed.ts                 ← Type-level check: every tier in a chain is DetailedRiskOracle
 │   ├── StubOracle.ts                  ← Lookup-table implementation, backed by fixtures/
+│   ├── DefaultOracle.ts               ← Oracle that always returns a fixed configured score
+│   ├── CoalescingOracle.ts            ← De-duplicates concurrent getScore calls per destination
+│   ├── ProvenanceOracle.ts            ← Decorator emitting a provenance record per score
+│   ├── CircuitBreakerOracle.ts        ← Trips on repeated infrastructure failures, sheds load while open
+│   ├── FallbackOracle.ts              ← Bandit-routed tier chain with graceful degradation
+│   ├── TypedFallbackOracle.ts         ← Typed constructor wrapper around FallbackOracle
+│   ├── FallbackObserver.ts            ← Observer interface for fallback-chain degradation events
+│   ├── RiskOracleAggregator.ts        ← Weighted-median aggregation across multiple oracle sources
+│   ├── OracleMiddleware.ts            ← Middleware type + compose() for chaining oracle decorators
+│   ├── OracleError.ts                 ← Typed error hierarchy for oracle failures
+│   ├── BatchRiskOracle.ts             ← Batched multi-destination scoring interface
 │   ├── StrKeyCodec.ts                 ← From-scratch Stellar strkey codec (base32 + CRC16-XModem)
 │   ├── DestinationValidator.ts        ← Destination grammar: G/M/C/L addresses + SEP-11 assets
-│   ├── ProvenanceOracle.ts            ← Decorator emitting a provenance record per score
 │   ├── Logger.ts                      ← Injectable structured Logger interface, no-op default
-│   ├── SorobanOracle.ts               ← Live oracle client (RPC get_score; local harness-tested)
+│   ├── SorobanOracle.ts               ← Live oracle client (planned, not yet in src/)
+│   ├── middleware/
+│   │   ├── withCache.ts               ← Cost/confidence-aware cache with stale-while-revalidate
+│   │   ├── withRateLimit.ts           ← Token-bucket rate limiting, optional cross-tab broadcast
+│   │   ├── withTimeout.ts             ← Per-call timeout budget
+│   │   └── withProvenance.ts          ← Middleware form of ProvenanceOracle
 │   ├── fixtures/testkit/
 │   │   ├── destinations.json          ← Vendored grydlock-testkit fixture (labelled destinations)
 │   │   ├── scores.json                ← Vendored grydlock-testkit fixture (destination -> score)
@@ -289,7 +305,7 @@ grydlock-oracle-adapter/
 │   │   ├── jsonScanner.ts             ← Hand-rolled incremental JSON tokenizer + position tracking
 │   │   ├── schema.ts                  ← Runtime shape validation (object-based + incremental) for both files
 │   │   └── index.ts                   ← Validates + exports the fixtures once, at module load
-│   └── index.ts                       ← Barrel export
+│   └── index.ts                       ← Barrel export — the package's public API surface
 │
 └── tests/
     ├── StubOracle.test.ts             ← getScore range + label-ordering tests against the fixtures
@@ -306,7 +322,7 @@ grydlock-oracle-adapter/
 
 ```bash
 npm install
-npm run build      # compile src/ to dist/
+npm run build      # compile src/ to dist/cjs (CommonJS) and dist/esm (ES modules), with declarations
 npm test           # run the test suite
 npm run typecheck  # tsc --noEmit
 npm run lint       # eslint .
@@ -315,7 +331,7 @@ npm run size       # bundle-size budget + tree-shaking check
 ```
 
 ```ts
-import { CoalescingOracle, Logger, StubOracle } from './src';
+import { CoalescingOracle, Logger, StubOracle } from 'grydlock-oracle-adapter';
 
 // Optional: structured logger injection (no-op by default).
 const logger: Logger = {
@@ -381,16 +397,16 @@ Covers:
 ## Bundle Size & Tree-Shaking
 
 Because this package ships inside a browser extension (`grydlock-extension`), its footprint
-directly affects extension load time and web-store review. `npm run size` enforces both a
-size budget and tree-shaking behavior:
+directly affects extension load time and web-store review. CI enforces both a size budget and
+tree-shaking behavior on every PR:
 
 ```bash
 npm run size
 ```
 
 The check (`scripts/bundle-size.mjs`) bundles the package with esbuild (minified ESM, from the
-TypeScript source — the same consumption path the extension's bundler will use once the ESM
-build output from #37 lands) for representative import patterns:
+TypeScript source — the same consumption path the extension's bundler will use) for
+representative import patterns:
 
 | Import pattern                   | Current size (minified)  | Budget |
 | -------------------------------- | ------------------------ | ------ |
