@@ -14,13 +14,27 @@
     "risk-oracle",
     "gryd-lock"
   ],
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.typetest.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "test:smoke": "node scripts/smoke-test.mjs",
     "size": "node scripts/bundle-size.mjs",
     "generate:fixtures": "node scripts/generate-fixture-text.mjs",
     "docs": "typedoc",

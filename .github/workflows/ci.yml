@@ -27,7 +27,9 @@ jobs:
       - run: npm run lint
       - run: npm run format:check || npm run format
       - run: npm test
+      - run: npm run size
       - run: npm run build
+      - run: npm run test:smoke
       - run: npm run docs:check
 
   commitlint:
