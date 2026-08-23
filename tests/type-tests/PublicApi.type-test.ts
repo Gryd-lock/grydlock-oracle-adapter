@@ -65,6 +65,33 @@ import {
   RiskOracleAggregatorSource,
   ScoreProvenance,
   ScoredResult,
+  SorobanFinalityPolicy,
+  SorobanInterfaceVersionRange,
+  SorobanOracle,
+  SorobanOracleConfig,
+  SorobanOracleEnvironment,
+  SorobanProtocolDescriptor,
+  SorobanRawLedgerCheckpoint,
+  SorobanRawOutcome,
+  SorobanRawResponse,
+  SorobanRpcTransport,
+  SorobanScoreRequest,
+  SorobanScoredResult,
+  SOROBAN_GET_SCORE_METHOD,
+  SOROBAN_ORACLE_INTERFACE_VERSION_RANGE,
+  SOROBAN_PROTOCOL_DESCRIPTOR,
+  decodeSorobanRawResponse,
+  isInterfaceVersionSupported,
+  InsufficientFinalityContext,
+  InsufficientFinalityError,
+  MalformedOracleResponseError,
+  ScoreNotYetComputedError,
+  UnsupportedInterfaceVersionContext,
+  UnsupportedInterfaceVersionError,
+  WrongContractContext,
+  WrongContractError,
+  WrongNetworkContext,
+  WrongNetworkError,
   STRKEY_BASE32_ALPHABET,
   StrKeyError,
   StrKeyErrorReason,
@@ -275,6 +302,102 @@ void [
   strKeyType,
   strKeyError.message,
   alphabet,
+];
+
+// --- SorobanOracle.
+
+const sorobanVersionRange: SorobanInterfaceVersionRange = { min: 1, max: 1 };
+const sorobanFinalityPolicy: SorobanFinalityPolicy = {
+  minConfirmations: 1,
+  maxResultAgeMs: 60_000,
+};
+const sorobanEnvironment: SorobanOracleEnvironment = 'test';
+const sorobanConfig: SorobanOracleConfig = {
+  environment: sorobanEnvironment,
+  networkPassphrase: 'Test SDF Network ; September 2015',
+  rpcEndpoints: ['https://soroban-testnet.stellar.org'],
+  contractId: 'CADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP5KR',
+  supportedInterfaceVersionRange: sorobanVersionRange,
+  finalityPolicy: sorobanFinalityPolicy,
+  requestBudgetMs: 5_000,
+};
+
+const sorobanTransport: SorobanRpcTransport = {
+  transportKind: 'fixture',
+  invokeGetScore: (
+    request: SorobanScoreRequest,
+    options: { timeoutMs: number; signal?: AbortSignal },
+  ) => {
+    void [request, options];
+    return Promise.resolve({});
+  },
+};
+
+const sorobanOracle = new SorobanOracle(sorobanConfig, sorobanTransport);
+const sorobanAsDetailed: RiskOracle & DetailedRiskOracle = sorobanOracle;
+const sorobanDetailed: Promise<SorobanScoredResult> = sorobanOracle.getScoreDetailed(DESTINATION);
+void [
+  sorobanOracle.getScore(DESTINATION),
+  sorobanAsDetailed.getScoreDetailed(DESTINATION),
+  sorobanDetailed,
+];
+
+const sorobanDescriptor: SorobanProtocolDescriptor = SOROBAN_PROTOCOL_DESCRIPTOR;
+const sorobanMethod: typeof SOROBAN_GET_SCORE_METHOD = 'get_score';
+const sorobanDefaultRange: SorobanInterfaceVersionRange = SOROBAN_ORACLE_INTERFACE_VERSION_RANGE;
+const sorobanRawResponse: SorobanRawResponse = decodeSorobanRawResponse({
+  interfaceVersion: 1,
+  networkPassphrase: 'Test SDF Network ; September 2015',
+  contractId: 'CADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP5KR',
+  ledger: { sequence: 1, closeTimeUnixMs: 0, latestSeenSequence: 1 },
+  outcome: { variant: 'unscored' },
+});
+const sorobanOutcome: SorobanRawOutcome = sorobanRawResponse.outcome;
+const sorobanLedger: SorobanRawLedgerCheckpoint = sorobanRawResponse.ledger;
+const sorobanVersionSupported: boolean = isInterfaceVersionSupported(1, sorobanVersionRange);
+void [
+  sorobanDescriptor,
+  sorobanMethod,
+  sorobanDefaultRange,
+  sorobanOutcome,
+  sorobanLedger,
+  sorobanVersionSupported,
+];
+
+const sorobanUnsupportedVersion: UnsupportedInterfaceVersionError =
+  new UnsupportedInterfaceVersionError('bad version', {
+    reportedVersion: 2,
+    supportedRange: { min: 1, max: 1 },
+  } satisfies UnsupportedInterfaceVersionContext);
+const sorobanWrongNetwork: WrongNetworkError = new WrongNetworkError(undefined, {
+  expectedNetworkPassphrase: 'a',
+  actualNetworkPassphrase: 'b',
+} satisfies WrongNetworkContext);
+const sorobanWrongContract: WrongContractError = new WrongContractError(undefined, {
+  expectedContractId: 'a',
+  actualContractId: 'b',
+} satisfies WrongContractContext);
+const sorobanMalformed: MalformedOracleResponseError = new MalformedOracleResponseError();
+const sorobanInsufficientFinality: InsufficientFinalityError = new InsufficientFinalityError(
+  undefined,
+  {
+    resultLedgerSequence: 1,
+    observedLedgerSequence: 1,
+    requiredConfirmations: 2,
+    observedConfirmations: 0,
+  } satisfies InsufficientFinalityContext,
+);
+const sorobanPending: ScoreNotYetComputedError = new ScoreNotYetComputedError(DESTINATION);
+const sorobanIsContractIncompatible =
+  sorobanUnsupportedVersion instanceof ContractIncompatibilityError;
+void [
+  sorobanUnsupportedVersion,
+  sorobanWrongNetwork,
+  sorobanWrongContract,
+  sorobanMalformed,
+  sorobanInsufficientFinality,
+  sorobanPending,
+  sorobanIsContractIncompatible,
 ];
 
 // --- Provenance record shape.
