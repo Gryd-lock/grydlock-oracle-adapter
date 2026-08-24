@@ -58,7 +58,14 @@ const CHECKS = [
     // (all oracle implementations, error taxonomy, and the cache/timeout/
     // provenance/rate-limit middleware), so the "everything" pattern bundles
     // those modules too. Measured ~30.2 KB minified at the time of the raise.
-    budgetBytes: 40 * KB,
+    //
+    // Raised from 40 KB in #110: the barrel now also exports the
+    // evidence-bearing RiskDecision contract (src/RiskDecision.ts,
+    // src/RequestContext.ts, src/validateRiskDecision.ts,
+    // src/RiskDecisionProvenance.ts) and the fail-closed legacy numeric
+    // adapter (src/legacy/numericAdapter.ts). Measured ~42.7 KB minified at
+    // the time of the raise.
+    budgetBytes: 45 * KB,
     allowedInputs: null, // the whole package — no allowlist to enforce
   },
 ];
