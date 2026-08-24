@@ -100,8 +100,13 @@ export class ContractIncompatibilityError extends OracleError {
 export interface UnsupportedInterfaceVersionContext extends OracleErrorContext {
   /** Interface version the oracle actually reported. */
   reportedVersion: number;
-  /** The `{ min, max }` range this adapter instance was configured to accept. */
-  supportedRange: { min: number; max: number };
+  /** The range this adapter instance was configured to accept. */
+  supportedRange: {
+    /** Minimum interface version accepted, inclusive. */
+    min: number;
+    /** Maximum interface version accepted, inclusive. */
+    max: number;
+  };
 }
 
 /**

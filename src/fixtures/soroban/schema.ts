@@ -73,9 +73,20 @@ export interface SorobanRawLedgerCheckpoint {
  * semantics" section for what distinguishes `unscored` from `pending`.
  */
 export type SorobanRawOutcome =
-  | { readonly variant: 'scored'; readonly score: number }
-  | { readonly variant: 'unscored' }
-  | { readonly variant: 'pending' };
+  | {
+      /** A numeric score was computed and is being reported. */
+      readonly variant: 'scored';
+      /** The reported score, validated against the protocol descriptor's `scoreRange`. */
+      readonly score: number;
+    }
+  | {
+      /** The contract has no score for this destination and never will compute one. */
+      readonly variant: 'unscored';
+    }
+  | {
+      /** The contract has not finished computing a score for this destination yet. */
+      readonly variant: 'pending';
+    };
 
 /**
  * The full decoded-but-not-yet-trusted response shape a `SorobanRpcTransport`

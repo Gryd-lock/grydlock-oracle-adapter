@@ -36,7 +36,12 @@ export interface ProtocolDescriptor {
   /** The distinct "no numeric score" outcome variants a response may report — see the ADR's "Absence semantics". */
   readonly absenceVariants: readonly string[];
   /** Inclusive range a `scored` outcome's `score` must fall within. */
-  readonly scoreRange: { readonly min: number; readonly max: number };
+  readonly scoreRange: {
+    /** Lowest valid score, inclusive. */
+    readonly min: number;
+    /** Highest valid score, inclusive. */
+    readonly max: number;
+  };
   /** Human-readable summary of why this descriptor is provisional. */
   readonly description: string;
 }
