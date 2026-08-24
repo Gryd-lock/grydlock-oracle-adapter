@@ -58,7 +58,12 @@ const CHECKS = [
     // (all oracle implementations, error taxonomy, and the cache/timeout/
     // provenance/rate-limit middleware), so the "everything" pattern bundles
     // those modules too. Measured ~30.2 KB minified at the time of the raise.
-    budgetBytes: 40 * KB,
+    //
+    // Raised from 40 KB in #109: the barrel now also exports the
+    // SorobanOracle protocol scaffold (src/SorobanOracle.ts and the
+    // src/fixtures/soroban/* schema/protocol modules). Measured ~45.3 KB
+    // minified at the time of the raise.
+    budgetBytes: 48 * KB,
     allowedInputs: null, // the whole package — no allowlist to enforce
   },
 ];
