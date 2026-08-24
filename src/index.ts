@@ -60,6 +60,10 @@ export {
   InsufficientFinalityError,
   InsufficientFinalityContext,
   ScoreNotYetComputedError,
+  RiskDecisionValidationError,
+  RiskDecisionValidationContext,
+  CacheControlUnsupportedError,
+  CacheControlUnsupportedContext,
 } from './OracleError';
 export {
   SorobanOracle,
@@ -122,3 +126,49 @@ export {
   BucketMap,
   joinBucketMaps,
 } from './middleware/withRateLimit';
+
+// --- Evidence-bearing risk-decision contract (progresses #110). Additive
+// alongside RiskOracle/ScoredResult above; see RiskDecision.ts's module doc.
+export {
+  RISK_DECISION_SCHEMA_VERSION,
+  RiskDecisionSchemaVersion,
+  RiskDecisionOutcome,
+  RiskDecision,
+  ScoredRiskDecision,
+  VerifiedRiskDecision,
+  UnscoredRiskDecision,
+  DegradedRiskDecision,
+  PolicyBlockedRiskDecision,
+  UnavailableRiskDecision,
+  IncompatibleRiskDecision,
+  isScoredRiskDecision,
+} from './RiskDecision';
+export {
+  RequestContext,
+  CacheControl,
+  DEFAULT_CACHE_CONTROL,
+  CreateRequestContextOptions,
+  createRequestContext,
+  remainingBudgetMs,
+  isExpired,
+  deriveRequestContext,
+  CacheControlCapabilities,
+  requireCacheControlSupport,
+} from './RequestContext';
+export {
+  ValidateRiskDecisionOptions,
+  validateRiskDecision,
+  isValidRiskDecision,
+} from './validateRiskDecision';
+export {
+  RISK_DECISION_PROVENANCE_SCHEMA_VERSION,
+  RiskDecisionProvenanceSchemaVersion,
+  RiskDecisionProvenanceEvent,
+  RiskDecisionRedactionOptions,
+  RiskDecisionProvenanceMeta,
+  pseudonymizeDestination,
+  createRiskDecisionProvenanceEvent,
+  riskDecisionLogLevel,
+  emitRiskDecisionProvenance,
+} from './RiskDecisionProvenance';
+export { NumericAdapterOptions, toLegacyScore, toLegacyRiskOracle } from './legacy/numericAdapter';
