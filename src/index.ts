@@ -50,11 +50,43 @@ export {
   ContractIncompatibilityError,
   QuorumNotMetError,
   QuorumNotMetContext,
+  UnsupportedInterfaceVersionError,
+  UnsupportedInterfaceVersionContext,
+  WrongNetworkError,
+  WrongNetworkContext,
+  WrongContractError,
+  WrongContractContext,
+  MalformedOracleResponseError,
+  InsufficientFinalityError,
+  InsufficientFinalityContext,
+  ScoreNotYetComputedError,
   RiskDecisionValidationError,
   RiskDecisionValidationContext,
   CacheControlUnsupportedError,
   CacheControlUnsupportedContext,
 } from './OracleError';
+export {
+  SorobanOracle,
+  SorobanOracleConfig,
+  SorobanOracleEnvironment,
+  SorobanFinalityPolicy,
+  SorobanRpcTransport,
+  SorobanScoredResult,
+} from './SorobanOracle';
+export {
+  PROTOCOL_DESCRIPTOR as SOROBAN_PROTOCOL_DESCRIPTOR,
+  ProtocolDescriptor as SorobanProtocolDescriptor,
+  SOROBAN_GET_SCORE_METHOD,
+  SOROBAN_ORACLE_INTERFACE_VERSION_RANGE,
+  InterfaceVersionRange as SorobanInterfaceVersionRange,
+  SorobanScoreRequest,
+  SorobanRawResponse,
+  SorobanRawOutcome,
+  SorobanRawLedgerCheckpoint,
+  decodeSorobanRawResponse,
+  isInterfaceVersionSupported,
+  SorobanResponseSchemaError,
+} from './fixtures/soroban';
 export { CoalescingOracle } from './CoalescingOracle';
 export { DefaultOracle } from './DefaultOracle';
 export {

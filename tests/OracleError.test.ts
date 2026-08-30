@@ -6,6 +6,12 @@ import {
   InvalidDestinationError,
   UnrecognizedDestinationError,
   ContractIncompatibilityError,
+  UnsupportedInterfaceVersionError,
+  WrongNetworkError,
+  WrongContractError,
+  MalformedOracleResponseError,
+  InsufficientFinalityError,
+  ScoreNotYetComputedError,
 } from '../src/OracleError';
 
 describe('OracleError', () => {
@@ -15,6 +21,78 @@ describe('OracleError', () => {
     expect(new InvalidDestinationError('GABC').code).toBe('INVALID_DESTINATION');
     expect(new UnrecognizedDestinationError('GABC').code).toBe('UNRECOGNIZED_DESTINATION');
     expect(new ContractIncompatibilityError().code).toBe('CONTRACT_INCOMPATIBILITY');
+  });
+
+  describe('SorobanOracle protocol errors', () => {
+    it('preserves stable error codes', () => {
+      expect(
+        new UnsupportedInterfaceVersionError('bad', {
+          reportedVersion: 2,
+          supportedRange: { min: 1, max: 1 },
+        }).code,
+      ).toBe('UNSUPPORTED_INTERFACE_VERSION');
+      expect(
+        new WrongNetworkError(undefined, {
+          expectedNetworkPassphrase: 'a',
+          actualNetworkPassphrase: 'b',
+        }).code,
+      ).toBe('WRONG_NETWORK');
+      expect(
+        new WrongContractError(undefined, {
+          expectedContractId: 'a',
+          actualContractId: 'b',
+        }).code,
+      ).toBe('WRONG_CONTRACT');
+      expect(new MalformedOracleResponseError().code).toBe('MALFORMED_ORACLE_RESPONSE');
+      expect(
+        new InsufficientFinalityError(undefined, {
+          resultLedgerSequence: 1,
+          observedLedgerSequence: 1,
+          requiredConfirmations: 2,
+          observedConfirmations: 0,
+        }).code,
+      ).toBe('INSUFFICIENT_FINALITY');
+      expect(new ScoreNotYetComputedError('GABC').code).toBe('SCORE_NOT_YET_COMPUTED');
+    });
+
+    it('UnsupportedInterfaceVersionError is a ContractIncompatibilityError specialization', () => {
+      const error = new UnsupportedInterfaceVersionError('bad', {
+        reportedVersion: 2,
+        supportedRange: { min: 1, max: 1 },
+      });
+
+      expect(error).toBeInstanceOf(ContractIncompatibilityError);
+      expect(error).toBeInstanceOf(OracleError);
+      // A plain ContractIncompatibilityError keeps its own, more general code.
+      expect(new ContractIncompatibilityError().code).toBe('CONTRACT_INCOMPATIBILITY');
+    });
+
+    it('every new error extends OracleError and supports instanceof', () => {
+      const errors = [
+        new UnsupportedInterfaceVersionError('bad', {
+          reportedVersion: 2,
+          supportedRange: { min: 1, max: 1 },
+        }),
+        new WrongNetworkError(undefined, {
+          expectedNetworkPassphrase: 'a',
+          actualNetworkPassphrase: 'b',
+        }),
+        new WrongContractError(undefined, { expectedContractId: 'a', actualContractId: 'b' }),
+        new MalformedOracleResponseError(),
+        new InsufficientFinalityError(undefined, {
+          resultLedgerSequence: 1,
+          observedLedgerSequence: 1,
+          requiredConfirmations: 2,
+          observedConfirmations: 0,
+        }),
+        new ScoreNotYetComputedError('GABC'),
+      ];
+
+      for (const error of errors) {
+        expect(error).toBeInstanceOf(Error);
+        expect(error).toBeInstanceOf(OracleError);
+      }
+    });
   });
 
   it('supports instanceof checks', () => {

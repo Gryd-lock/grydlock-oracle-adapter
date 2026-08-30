@@ -59,6 +59,11 @@ const CHECKS = [
     // provenance/rate-limit middleware), so the "everything" pattern bundles
     // those modules too. Measured ~30.2 KB minified at the time of the raise.
     //
+    // Raised from 40 KB in #109: the barrel now also exports the
+    // SorobanOracle protocol scaffold (src/SorobanOracle.ts and the
+    // src/fixtures/soroban/* schema/protocol modules). Measured ~45.3 KB
+    // minified at the time of the raise.
+    //
     // Raised from 40 KB in #110: the barrel now also exports the
     // evidence-bearing RiskDecision contract (src/RiskDecision.ts,
     // src/RequestContext.ts, src/validateRiskDecision.ts,
@@ -66,13 +71,9 @@ const CHECKS = [
     // adapter (src/legacy/numericAdapter.ts). Measured ~42.7 KB minified at
     // the time of the raise.
     //
-    // Raised from 45 KB in #112: the barrel now also exports the
-    // restart-safe lifecycle/persistence/coordination surface
-    // (src/lifecycle/*.ts, src/createProductionOracleStack.ts, and the
-    // namespace/persistence/lease additions to src/middleware/withCache.ts
-    // and src/middleware/withRateLimit.ts). Measured ~56.0 KB minified at
-    // the time of the raise.
-    budgetBytes: 58 * KB,
+    // Both raises land together here: with the Soroban scaffold and the
+    // RiskDecision contract both in the barrel, measured ~53.6 KB minified.
+    budgetBytes: 55 * KB,
     allowedInputs: null, // the whole package — no allowlist to enforce
   },
 ];

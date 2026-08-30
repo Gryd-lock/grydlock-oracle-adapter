@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
       # semantic-release and its plugins are now pinned in package.json/package-lock.json
       # so we install them via npm ci before running semantic-release.
       - run: npm ci
