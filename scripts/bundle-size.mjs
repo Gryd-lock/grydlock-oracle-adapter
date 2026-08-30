@@ -65,7 +65,14 @@ const CHECKS = [
     // src/RiskDecisionProvenance.ts) and the fail-closed legacy numeric
     // adapter (src/legacy/numericAdapter.ts). Measured ~42.7 KB minified at
     // the time of the raise.
-    budgetBytes: 45 * KB,
+    //
+    // Raised from 45 KB in #112: the barrel now also exports the
+    // restart-safe lifecycle/persistence/coordination surface
+    // (src/lifecycle/*.ts, src/createProductionOracleStack.ts, and the
+    // namespace/persistence/lease additions to src/middleware/withCache.ts
+    // and src/middleware/withRateLimit.ts). Measured ~56.0 KB minified at
+    // the time of the raise.
+    budgetBytes: 58 * KB,
     allowedInputs: null, // the whole package — no allowlist to enforce
   },
 ];

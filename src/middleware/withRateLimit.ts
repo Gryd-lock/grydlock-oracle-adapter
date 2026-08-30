@@ -1,6 +1,13 @@
 import { RiskOracle } from '../RiskOracle';
 import { OracleMiddleware } from '../OracleMiddleware';
 import { Logger, noopLogger } from '../Logger';
+import { Disposable } from '../lifecycle/Disposable';
+import { DurableStore, readEnvelope, wrapEnvelope } from '../lifecycle/DurableStore';
+
+/** Current gossip wire-protocol version. Bumped whenever `GossipMessage`'s shape changes incompatibly; a message at any other version is dropped rather than misparsed. */
+const GOSSIP_PROTOCOL_VERSION = 1;
+const OWN_BUCKETS_SCHEMA_VERSION = 1;
+const RATE_LIMIT_KEY_PREFIX = 'rate-limit';
 
 /** Structured detail attached to every {@link OracleRateLimitError}. */
 export interface RateLimitDenialDetails {
@@ -100,13 +107,62 @@ export interface RateLimitOptions {
   now?: () => number;
   /** Logger for gossip send/receive failures. Defaults to the no-op logger. */
   logger?: Logger;
+  /**
+   * Upper bound on distinct contexts tracked at once (own context always
+   * counts as one of these and is never evicted). Bounds memory against a
+   * flood of forged `contextId`s: once exceeded, the least-recently-updated
+   * non-self context is dropped to make room, exactly like natural staleness
+   * pruning would eventually do anyway. Defaults to 256.
+   */
+  maxTrackedContexts?: number;
+  /** Maximum accepted `contextId` length in a received gossip message. Defaults to 128. */
+  maxContextIdLength?: number;
+  /** Maximum accepted number of bucket entries in a single received gossip message. Defaults to `4 * bucketsPerWindow` (generous slack for clock skew, still bounded). */
+  maxBucketsPerMessage?: number;
+  /**
+   * Durable store for this context's own admitted-count buckets, so a warm
+   * restart of the *same* context doesn't get a silently-reset budget
+   * mid-window ("restart cannot ... silently unleash full traffic").
+   * Requires a stable, caller-supplied `contextId` — a randomly generated
+   * one can never be found again after a restart, so persistence with no
+   * explicit `contextId` is accepted but has nothing to hydrate from.
+   */
+  store?: DurableStore;
 }
 
 interface GossipMessage {
   type: 'grydlock-oracle-adapter:rate-limit-gossip';
+  /** Wire-protocol version — see {@link GOSSIP_PROTOCOL_VERSION}. A message at any other version is dropped, not best-effort-parsed. */
+  version: number;
   contextId: string;
   /** bucketIndex (as a string, for JSON/structured-clone-object-key safety) -> admitted count. */
   buckets: Record<string, number>;
+}
+
+interface PersistedOwnBuckets {
+  contextId: string;
+  /** bucketIndex (as a string) -> admitted count. */
+  buckets: Record<string, number>;
+}
+
+/** Result of {@link RateLimitedRiskOracle.getCoordinationStatus}. */
+export interface RateLimitCoordinationStatus {
+  /** `'coordinated'`: a gossip channel is live, so `budget` is (best-effort) shared across every known context. `'local-only'`: no channel is available, so `budget` is enforced purely against this instance's own admissions — see {@link withRateLimit}'s "Degrading to single-context behavior". */
+  mode: 'coordinated' | 'local-only';
+  /** Number of distinct contexts (including this one) currently tracked, per `withRateLimit`'s module doc's "Bounded memory" section. */
+  knownContextCount: number;
+}
+
+/** What {@link withRateLimit} hands back: a plain `RiskOracle` plus disposal and degraded-mode introspection. */
+export interface RateLimitedRiskOracle extends RiskOracle, Disposable {
+  /** Reports whether this instance can currently coordinate a shared budget across contexts, or is enforcing `budget` purely against its own admissions — see {@link withRateLimit}'s "Degrading to single-context behavior". */
+  getCoordinationStatus(): RateLimitCoordinationStatus;
+}
+
+function isPersistedOwnBuckets(value: unknown): value is PersistedOwnBuckets {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.contextId === 'string' && typeof v.buckets === 'object' && v.buckets !== null;
 }
 
 function randomContextId(): string {
@@ -156,6 +212,7 @@ function isGossipMessage(data: unknown): data is GossipMessage {
   const d = data as Record<string, unknown>;
   return (
     d.type === 'grydlock-oracle-adapter:rate-limit-gossip' &&
+    d.version === GOSSIP_PROTOCOL_VERSION &&
     typeof d.contextId === 'string' &&
     typeof d.buckets === 'object' &&
     d.buckets !== null
@@ -343,17 +400,21 @@ function isGossipMessage(data: unknown): data is GossipMessage {
  * `tests/withRateLimit.single-context.test.ts` against a from-scratch
  * baseline implementation.
  */
-export function withRateLimit(options: RateLimitOptions): OracleMiddleware {
+export function withRateLimit(
+  options: RateLimitOptions,
+): OracleMiddleware<RiskOracle, RateLimitedRiskOracle> {
   const {
     budget,
     windowMs,
     gossipIntervalMs = Math.min(Math.max(windowMs / 10, 250), windowMs),
     bucketMs = gossipIntervalMs,
     channelName = 'grydlock-oracle-adapter:rate-limit',
-    channel = defaultChannel(channelName),
     contextId = randomContextId(),
     now = Date.now,
     logger = noopLogger,
+    maxTrackedContexts = 256,
+    maxContextIdLength = 128,
+    store,
   } = options;
 
   if (!Number.isFinite(budget) || budget <= 0) {
@@ -367,20 +428,109 @@ export function withRateLimit(options: RateLimitOptions): OracleMiddleware {
   }
 
   const bucketsPerWindow = Math.max(1, Math.ceil(windowMs / bucketMs));
+  const maxBucketsPerMessage = options.maxBucketsPerMessage ?? 4 * bucketsPerWindow;
 
-  return (next: RiskOracle): RiskOracle => {
+  // Ownership: a channel this factory call default-constructs is ours to
+  // close on dispose(); one the caller explicitly supplied (even
+  // `undefined`, which is why `'channel' in options` is checked rather than
+  // `options.channel === undefined`) is never closed here — see
+  // `lifecycle/Disposable.ts`'s ownership rule.
+  const channelSupplied = Object.prototype.hasOwnProperty.call(options, 'channel');
+  const channel = channelSupplied ? (options.channel ?? null) : defaultChannel(channelName);
+  const ownsChannel = !channelSupplied;
+
+  return (next: RiskOracle): RateLimitedRiskOracle => {
     const counters = new Map<string, Map<number, number>>();
     counters.set(contextId, new Map());
+    const lastSeenAt = new Map<string, number>(); // non-self contextId -> last time we recorded/merged something for it, for LRU eviction under maxTrackedContexts
+    let disposed = false;
 
     let lastBroadcastAt = -Infinity;
+    let hydrated: Promise<void> | undefined;
+
+    function ownStorageKey(): string {
+      return `${RATE_LIMIT_KEY_PREFIX}::${channelName}::${contextId}`;
+    }
+
+    function persistOwn(): void {
+      if (!store) return;
+      const own = counters.get(contextId);
+      if (!own) return;
+      const buckets: Record<string, number> = {};
+      for (const [b, c] of own) buckets[String(b)] = c;
+      const record: PersistedOwnBuckets = { contextId, buckets };
+      store
+        .setMany(new Map([[ownStorageKey(), wrapEnvelope(OWN_BUCKETS_SCHEMA_VERSION, record)]]))
+        .catch((err: unknown) => logger.warn('withRateLimit.persistFailed', { err, contextId }));
+    }
+
+    /**
+     * Restores this context's own admitted-count buckets from `store`, if
+     * any — so a warm restart with the *same* stable `contextId` resumes
+     * mid-window instead of getting a fresh, silently-larger effective
+     * budget for the remainder of that window ("restart cannot ... silently
+     * unleash full traffic"). A record for a different `contextId` (or a
+     * caller that never set one and got a fresh random one) simply isn't
+     * found, which is the correct behavior for a genuinely new identity.
+     */
+    function ensureHydrated(): Promise<void> {
+      if (!store) return Promise.resolve();
+      if (!hydrated) {
+        hydrated = (async () => {
+          let raw: unknown;
+          try {
+            const all = await store.getAll();
+            raw = all.get(ownStorageKey());
+          } catch (err) {
+            logger.warn('withRateLimit.hydrationReadFailed', { err, contextId });
+            return;
+          }
+          const record = readEnvelope(raw, OWN_BUCKETS_SCHEMA_VERSION, isPersistedOwnBuckets);
+          if (record === undefined || record.contextId !== contextId) return;
+          const own = ensureContext(contextId);
+          for (const [bucketKey, count] of Object.entries(record.buckets)) {
+            const b = Number(bucketKey);
+            if (Number.isFinite(b) && Number.isFinite(count) && count >= 0) own.set(b, count);
+          }
+          pruneStale(now());
+        })();
+      }
+      return hydrated;
+    }
 
     function bucketIndexAt(t: number): number {
       return Math.floor(t / bucketMs);
     }
 
+    /** Drops the least-recently-*seen* (per `lastSeenAt`) non-self context to
+     * make room, when a brand-new context would push `counters` past
+     * `maxTrackedContexts`. Bounds memory against a flood of distinct
+     * forged `contextId`s independent of natural bucket-staleness pruning,
+     * which only ever removes a context once every one of its buckets has
+     * aged out — an attacker sending one bucket per forged id per window
+     * would otherwise never trigger that path. */
+    function evictLeastRecentlySeenContext(): void {
+      let oldestCid: string | undefined;
+      let oldestSeenAt = Number.POSITIVE_INFINITY;
+      for (const [cid, seenAt] of lastSeenAt) {
+        if (seenAt < oldestSeenAt) {
+          oldestSeenAt = seenAt;
+          oldestCid = cid;
+        }
+      }
+      const victim = oldestCid ?? [...counters.keys()].find((cid) => cid !== contextId);
+      if (victim !== undefined) {
+        counters.delete(victim);
+        lastSeenAt.delete(victim);
+      }
+    }
+
     function ensureContext(cid: string): Map<number, number> {
       let buckets = counters.get(cid);
       if (buckets === undefined) {
+        if (cid !== contextId && counters.size >= maxTrackedContexts) {
+          evictLeastRecentlySeenContext();
+        }
         buckets = new Map();
         counters.set(cid, buckets);
       }
@@ -397,6 +547,7 @@ export function withRateLimit(options: RateLimitOptions): OracleMiddleware {
         }
         if (buckets.size === 0 && cid !== contextId) {
           counters.delete(cid);
+          lastSeenAt.delete(cid);
         }
       }
     }
@@ -417,16 +568,38 @@ export function withRateLimit(options: RateLimitOptions): OracleMiddleware {
       return sumBuckets(counters.get(contextId) as Map<number, number>);
     }
 
+    /**
+     * Validates and merges one received gossip message. Hardened against a
+     * malicious or buggy peer beyond the original shape check
+     * (`isGossipMessage`, which only confirms wire-level shape): an
+     * implausible `contextId` (empty or absurdly long) or an oversized
+     * bucket map is dropped in full rather than partially trusted, and any
+     * individual bucket entry whose index is further than a bounded
+     * tolerance from this context's own clock is dropped as forged/skewed —
+     * so neither a flood of distinct fake identities nor a single message
+     * full of nonsense buckets can inflate `globalEstimate()` or grow state
+     * without bound (see `maxTrackedContexts`/`evictLeastRecentlySeenContext`
+     * for the identity-flood bound specifically).
+     */
     function mergeGossip(msg: GossipMessage): void {
       if (msg.contextId === contextId) return; // never let a self-echo overwrite local truth
+      if (msg.contextId.length === 0 || msg.contextId.length > maxContextIdLength) return;
+
+      const bucketEntries = Object.entries(msg.buckets);
+      if (bucketEntries.length > maxBucketsPerMessage) return;
+
+      const nowBucket = bucketIndexAt(now());
+      const skewToleranceBuckets = bucketsPerWindow * 8; // generous but bounded tolerance for clock skew/late delivery
       const incoming = new Map<number, number>();
-      for (const [bucketKey, count] of Object.entries(msg.buckets)) {
+      for (const [bucketKey, count] of bucketEntries) {
         const b = Number(bucketKey);
-        if (!Number.isFinite(b) || !Number.isFinite(count) || count < 0) continue; // ignore malformed entries
+        if (!Number.isFinite(b) || !Number.isFinite(count) || count < 0) continue; // malformed entry
+        if (Math.abs(b - nowBucket) > skewToleranceBuckets) continue; // implausible bucket: forged/skewed clock
         incoming.set(b, count);
       }
       const existing = ensureContext(msg.contextId);
       counters.set(msg.contextId, new Map(joinBucketMaps(existing, incoming)));
+      lastSeenAt.set(msg.contextId, now());
     }
 
     function broadcastOwnState(t: number): void {
@@ -436,6 +609,7 @@ export function withRateLimit(options: RateLimitOptions): OracleMiddleware {
       for (const [b, c] of own) buckets[String(b)] = c;
       const msg: GossipMessage = {
         type: 'grydlock-oracle-adapter:rate-limit-gossip',
+        version: GOSSIP_PROTOCOL_VERSION,
         contextId,
         buckets,
       };
@@ -447,25 +621,67 @@ export function withRateLimit(options: RateLimitOptions): OracleMiddleware {
       }
     }
 
-    if (channel) {
-      channel.addEventListener('message', (event) => {
-        try {
-          if (isGossipMessage(event.data)) {
-            mergeGossip(event.data);
-            // Prune here too, not only inside getScore: a context that
-            // receives gossip but is never itself called would otherwise
-            // accumulate unboundedly with call volume never triggering a
-            // cleanup (see module doc, "Bounded memory").
-            pruneStale(now());
+    const messageListener = channel
+      ? (event: { data: unknown }): void => {
+          try {
+            if (isGossipMessage(event.data)) {
+              mergeGossip(event.data);
+              // Prune here too, not only inside getScore: a context that
+              // receives gossip but is never itself called would otherwise
+              // accumulate unboundedly with call volume never triggering a
+              // cleanup (see module doc, "Bounded memory").
+              pruneStale(now());
+            }
+          } catch (err) {
+            logger.warn('withRateLimit.gossipHandlingFailed', { err, contextId });
           }
-        } catch (err) {
-          logger.warn('withRateLimit.gossipHandlingFailed', { err, contextId });
         }
-      });
+      : undefined;
+
+    if (channel && messageListener) {
+      channel.addEventListener('message', messageListener);
     }
 
     return {
+      /**
+       * Whether this instance can actually coordinate a shared budget with
+       * other contexts right now. `'local-only'` means exactly what
+       * `withRateLimit`'s module doc's "Degrading to single-context
+       * behavior" section says: this instance enforces `budget` against
+       * only its own admissions, with no claim of a strict *global* quota
+       * (non-negotiable invariant: degraded coordination is visible and
+       * never claims strict global enforcement it can't back up).
+       */
+      getCoordinationStatus(): RateLimitCoordinationStatus {
+        return {
+          mode: channel ? 'coordinated' : 'local-only',
+          knownContextCount: counters.size,
+        };
+      },
+      /**
+       * Idempotent. Removes this instance's own gossip listener always; closes
+       * the channel only if this `withRateLimit(...)` call default-constructed
+       * it (`ownsChannel`) — a caller-supplied channel is never closed here,
+       * per `Disposable`'s ownership rule.
+       */
+      async dispose(): Promise<void> {
+        if (disposed) return;
+        disposed = true;
+        if (channel && messageListener) {
+          channel.removeEventListener?.('message', messageListener);
+        }
+        if (channel && ownsChannel) {
+          channel.close?.();
+        }
+        counters.clear();
+        lastSeenAt.clear();
+      },
       async getScore(destination: string): Promise<number> {
+        if (disposed) {
+          throw new Error('withRateLimit: getScore called after dispose()');
+        }
+        await ensureHydrated();
+
         const t = now();
         pruneStale(t);
 
@@ -500,6 +716,7 @@ export function withRateLimit(options: RateLimitOptions): OracleMiddleware {
         const own = counters.get(contextId) as Map<number, number>;
         const b = bucketIndexAt(t);
         own.set(b, (own.get(b) ?? 0) + 1);
+        persistOwn();
 
         if (t - lastBroadcastAt >= gossipIntervalMs) {
           broadcastOwnState(t);

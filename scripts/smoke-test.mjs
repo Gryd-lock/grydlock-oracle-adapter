@@ -78,6 +78,15 @@ const EXPECTED_EXPORTS = [
   'withRateLimit',
   'OracleRateLimitError',
   'joinBucketMaps',
+  'isDisposable',
+  'DisposableGroup',
+  'InMemoryDurableStore',
+  'createChromeStorageLocalStore',
+  'wrapEnvelope',
+  'readEnvelope',
+  'RefreshLeaseCoordinator',
+  'OracleLifecycleManager',
+  'createProductionOracleStack',
 ];
 
 function assertExports(label, moduleExports) {
