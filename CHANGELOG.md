@@ -1,3 +1,20 @@
+# [1.3.0](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.2.0...v1.3.0) (2026-08-30)
+
+
+### Bug Fixes
+
+* **ci:** bump release workflow to Node 24 ([039a0f0](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/039a0f0549d8a36c35cee3d88a83a1939f53f538))
+* **docs:** document nested range/outcome fields for typedoc validation ([a1f67c1](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/a1f67c129d91ed5087f2bf2629a0db250e1c9060))
+* resolve CI build and supply-chain failures ([b7b89ec](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/b7b89ec61b652efe4d5f213e3b9ab74c3f5f7938))
+* resolve CI build and supply-chain failures ([15e2538](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/15e2538cf8fffac4bd3bd0718de43a371e831f5f))
+
+
+### Features
+
+* automate testkit fixture synchronization ([480691f](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/480691fcc880806357a09543fc8b8f5ba1926b3b))
+* **risk-decision:** add evidence-bearing decision contract and fail-closed numeric adapter ([df9b1d6](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/df9b1d63759d010c5138f96177cab1f0fdd7238e)), closes [#110](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/110)
+* **soroban:** scaffold finality-aware SorobanOracle protocol ([95c0551](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/95c0551e13afe8155d50a03172e379a08849c5da))
+
 # [1.2.0](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.1.0...v1.2.0) (2026-08-22)
 
 
