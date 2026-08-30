@@ -446,6 +446,40 @@ then `withRateLimit`, with `withTimeout` innermost directly around the raw oracl
 each underlying attempt gets its own budget. `compose`'s result type reflects exactly
 which layers preserve or add `getScoreDetailed`.
 
+### Restart-safe lifecycle, persistence, and cross-context coordination
+
+For a production deployment — especially a Manifest V3 browser extension, where a
+background service worker can be suspended and cold-started at any time —
+`createProductionOracleStack` composes `withCache`, `withRateLimit`,
+`CircuitBreakerOracle`, and `CoalescingOracle` into one stack with a single owner for
+their combined lifecycle, restart-safe cache persistence, and bounded cross-context
+refresh coordination:
+
+```ts
+import { createProductionOracleStack, createChromeStorageLocalStore } from './src';
+
+const stack = createProductionOracleStack({
+  inner: myRawOracle,
+  namespace: {
+    network: 'Public Global Stellar Network ; September 2015',
+    contract: 'CONTRACT_ID',
+    evidenceSchemaVersion: '1',
+    policyVersion: '1',
+  },
+  cache: { ttlMs: 30_000, staleMs: 60_000, maxEvidenceAgeMs: 5 * 60_000 },
+  rateLimit: { budget: 100, windowMs: 60_000 },
+  circuitBreaker: { failureThreshold: 5, cooldownWindow: 30_000 },
+  refreshLease: {},
+  store: createChromeStorageLocalStore('grydlock') ?? undefined,
+});
+
+await stack.lifecycle.init();
+// serve traffic via stack.oracle, then stack.dispose() on shutdown/suspend
+```
+
+See `LIFECYCLE_ADR.md` for the design rationale and `RESTART_RUNBOOK.md` for
+operational guidance (restart scenarios, fault-injection checklist).
+
 ## Tech Stack
 
 - **TypeScript**

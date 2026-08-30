@@ -114,18 +114,56 @@ export {
 } from './RiskOracleAggregator';
 export { OracleMiddleware, compose, InnermostIn, ChainOut } from './OracleMiddleware';
 export { FallbackObserver } from './FallbackObserver';
-export { withCache, CacheOptions } from './middleware/withCache';
+export { withCache, CacheOptions, CacheNamespace } from './middleware/withCache';
 export { withTimeout, TimeoutOptions } from './middleware/withTimeout';
 export { withProvenance } from './middleware/withProvenance';
 export {
   withRateLimit,
   RateLimitOptions,
+  RateLimitedRiskOracle,
+  RateLimitCoordinationStatus,
   OracleRateLimitError,
   RateLimitDenialDetails,
   BroadcastChannelLike,
   BucketMap,
   joinBucketMaps,
 } from './middleware/withRateLimit';
+
+// --- Restart-safe lifecycle, persistence, and cross-context coordination
+// (Epic #112): lifecycle ownership, durable evidence/state persistence, and
+// bounded cross-context refresh leases, composed by
+// `createProductionOracleStack`.
+export { Disposable, isDisposable, DisposableGroup } from './lifecycle/Disposable';
+export {
+  DurableStore,
+  InMemoryDurableStore,
+  ChromeStorageAreaLike,
+  createChromeStorageLocalStore,
+  DurableEnvelope,
+  wrapEnvelope,
+  readEnvelope,
+} from './lifecycle/DurableStore';
+export {
+  RefreshLeaseCoordinator,
+  RefreshLeaseCoordinatorOptions,
+  LeaseHandle,
+  LockManagerLike,
+  CoordinationStatus,
+} from './lifecycle/RefreshLeaseCoordinator';
+export {
+  OracleLifecycleManager,
+  OracleLifecycleManagerOptions,
+  LifecycleState,
+  HealthCheckable,
+} from './lifecycle/OracleLifecycleManager';
+export {
+  createProductionOracleStack,
+  ProductionOracleStackOptions,
+  ProductionOracleStack,
+  ProductionCacheOptions,
+  ProductionRateLimitOptions,
+  ProductionRefreshLeaseOptions,
+} from './createProductionOracleStack';
 
 // --- Evidence-bearing risk-decision contract (progresses #110). Additive
 // alongside RiskOracle/ScoredResult above; see RiskDecision.ts's module doc.
