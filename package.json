@@ -28,7 +28,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "node init && node scripts/build.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.typetest.json",
     "lint": "eslint .",
     "format": "prettier --write .",

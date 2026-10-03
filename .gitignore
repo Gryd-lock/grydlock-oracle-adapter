@@ -14,3 +14,4 @@ reports/
 *.log
 .DS_Store
 drift-report.md
+config.bat
