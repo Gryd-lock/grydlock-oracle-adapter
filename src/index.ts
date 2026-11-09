@@ -74,6 +74,19 @@ export {
   SorobanScoredResult,
 } from './SorobanOracle';
 export {
+  StellarRpcTransport,
+  StellarRpcTransportOptions,
+  StellarRpcClient,
+  encodeTarget as encodeSorobanTarget,
+} from './StellarRpcTransport';
+export {
+  createSorobanOracle,
+  CreateSorobanOracleOptions,
+  SorobanNetworkTarget,
+  GRYDLOCK_TESTNET,
+  DEFAULT_SOROBAN_FINALITY_POLICY,
+} from './createSorobanOracle';
+export {
   PROTOCOL_DESCRIPTOR as SOROBAN_PROTOCOL_DESCRIPTOR,
   ProtocolDescriptor as SorobanProtocolDescriptor,
   SOROBAN_GET_SCORE_METHOD,

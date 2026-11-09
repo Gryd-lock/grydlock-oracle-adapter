@@ -78,6 +78,10 @@ const EXPECTED_EXPORTS = [
   'withRateLimit',
   'OracleRateLimitError',
   'joinBucketMaps',
+  'SorobanOracle',
+  'StellarRpcTransport',
+  'createSorobanOracle',
+  'GRYDLOCK_TESTNET',
 ];
 
 function assertExports(label, moduleExports) {
@@ -142,7 +146,9 @@ async function checkBundlerConsumption() {
 
 async function main() {
   if (!existsSync('dist/esm/index.js') || !existsSync('dist/cjs/index.js')) {
-    console.error('dist/ not found or incomplete — run `npm run build` before `npm run test:smoke`.');
+    console.error(
+      'dist/ not found or incomplete — run `npm run build` before `npm run test:smoke`.',
+    );
     process.exit(1);
   }
 
