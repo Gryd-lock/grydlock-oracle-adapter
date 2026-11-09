@@ -1,0 +1,36 @@
+name: Contract
+
+# Unit tests, lints and a wasm build for the reference Soroban contract.
+on:
+  pull_request:
+    paths:
+      - 'contract/**'
+      - '.github/workflows/contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'contract/**'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: contract
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contract
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build --target wasm32v1-none --release

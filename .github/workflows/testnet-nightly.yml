@@ -1,0 +1,51 @@
+name: Testnet nightly
+
+# Reads live scores from the reference risk-oracle contract on Stellar
+# testnet (contract/deployments/testnet.json) through the real
+# StellarRpcTransport. Scheduled, not per-PR, so a testnet or RPC outage
+# never blocks a merge. A failed scheduled run opens (or updates) a
+# tracking issue.
+on:
+  schedule:
+    - cron: '17 3 * * *' # daily 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  live-testnet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Live testnet suite
+        env:
+          GRYDLOCK_LIVE_TESTNET: '1'
+        run: npx vitest run tests/SorobanOracle.testnet.test.ts
+
+      - name: Open or update testnet tracking issue
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create testnet-nightly \
+            --description "Nightly live-testnet check failed" \
+            --color B60205 --force
+          body="The nightly live-testnet suite failed: $RUN_URL
+
+          Likely causes: a testnet reset (contract and data are wiped; redeploy with
+          \`node scripts/deploy-testnet-contract.mjs\` and update the contract id),
+          an RPC outage, or a contract/transport interface change."
+          existing=$(gh issue list --label testnet-nightly --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "Nightly testnet check failing" --label testnet-nightly --body "$body"
+          fi
