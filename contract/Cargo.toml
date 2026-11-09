@@ -1,0 +1,27 @@
+[package]
+name = "grydlock-risk-oracle"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal admin-curated 0-100 risk-score oracle for Gryd Lock (testnet reference contract)."
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = "29.0.1"
+
+[dev-dependencies]
+soroban-sdk = { version = "29.0.1", features = ["testutils"] }
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
