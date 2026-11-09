@@ -59,6 +59,8 @@ interface CancellableInFlightEntry {
  * *every* currently-attached caller has cancelled is the shared call's own
  * `AbortController` actually aborted, so the resource is freed but a lone
  * still-interested caller is never starved by someone else's cancellation.
+ *
+ * @experimental
  */
 export class CoalescingOracle implements RiskOracle, CancellableRiskOracle {
   private readonly inFlightByDestination = new Map<string, Promise<number>>();
@@ -103,7 +105,9 @@ export class CoalescingOracle implements RiskOracle, CancellableRiskOracle {
    */
   getScoreCancellable(destination: string, signal: AbortSignal): Promise<number> {
     if (signal.aborted) {
-      return Promise.reject(new OracleCancelledError('The oracle request was cancelled.', { destination }));
+      return Promise.reject(
+        new OracleCancelledError('The oracle request was cancelled.', { destination }),
+      );
     }
 
     let entry = this.cancellableInFlightByDestination.get(destination);

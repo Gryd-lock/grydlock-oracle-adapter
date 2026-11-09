@@ -74,9 +74,10 @@ const CHECKS = [
     // Both raises land together here: with the Soroban scaffold and the
     // RiskDecision contract both in the barrel, measured ~53.6 KB minified.
     //
-    // Raised to 60 KB for the live StellarRpcTransport + createSorobanOracle
-    // (measured ~58.9 KB minified, SDK external).
-    budgetBytes: 60 * KB,
+    // Raised to 58 KB for the live StellarRpcTransport + createSorobanOracle,
+    // partly offset by removing withRateLimit, typedFallbackOracle/AllDetailed
+    // and DefaultOracle (measured ~55.7 KB minified, SDK external).
+    budgetBytes: 58 * KB,
     allowedInputs: null, // the whole package — no allowlist to enforce
   },
   {

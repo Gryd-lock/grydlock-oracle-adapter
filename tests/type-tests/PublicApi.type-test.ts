@@ -10,7 +10,6 @@
  * OracleMiddleware.type-test.ts's file doc for the pattern.
  */
 import {
-  AllDetailed,
   AssetCodeType,
   assetCodeType,
   BatchCallOptions,
@@ -20,8 +19,6 @@ import {
   BatchResult,
   BatchRiskOracle,
   BatchRiskOracleOptions,
-  BroadcastChannelLike,
-  BucketMap,
   CacheOptions,
   CacheStatus,
   CircuitBreakerConfig,
@@ -30,7 +27,6 @@ import {
   CoalescingOracle,
   compose,
   ContractIncompatibilityError,
-  DefaultOracle,
   DecodedStrKey,
   decodeStrKey,
   DetailedRiskOracle,
@@ -42,14 +38,12 @@ import {
   FallbackScoredResult,
   honestOrderBounds,
   InvalidDestinationError,
-  joinBucketMaps,
   Logger,
   LogFields,
   noopLogger,
   OracleError,
   OracleErrorContext,
   OracleMiddleware,
-  OracleRateLimitError,
   OracleSource,
   OracleTimeoutError,
   OracleUnavailableError,
@@ -57,8 +51,6 @@ import {
   ProvenanceOracleOptions,
   QuorumNotMetContext,
   QuorumNotMetError,
-  RateLimitDenialDetails,
-  RateLimitOptions,
   RiskOracle,
   RiskOracleAggregator,
   RiskOracleAggregatorOptions,
@@ -100,21 +92,16 @@ import {
   TierRoutingDecision,
   TimeoutOptions,
   toBatchOracle,
-  typedFallbackOracle,
   UnrecognizedDestinationError,
   ValidatedDestination,
   validateDestination,
   weightedMedian,
   withCache,
   withProvenance,
-  withRateLimit,
   withTimeout,
 } from '../../src';
 
 const DESTINATION = 'GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET';
-
-/** Compiles only when `T` is exactly `true`. */
-type ExpectTrue<T extends true> = T;
 
 // --- The README Quick Start, verbatim shape: must compile against the barrel.
 
@@ -142,10 +129,6 @@ void [plainOracle, detailedScore, cacheStatus, source];
 const coalescing: RiskOracle = new CoalescingOracle(plainOracle);
 void coalescing.getScore(DESTINATION);
 
-const defaults: RiskOracle = new DefaultOracle();
-const defaultsAt50: RiskOracle = new DefaultOracle(50);
-void [defaults.getScore(DESTINATION), defaultsAt50];
-
 const circuitBreaker = new CircuitBreakerOracle(plainOracle, {
   failureThreshold: 3,
   cooldownWindow: 1_000,
@@ -154,7 +137,7 @@ const breakerState: CircuitBreakerState = circuitBreaker.getState();
 const circuitBreakerAsOracle: RiskOracle = circuitBreaker;
 void [breakerState, CircuitBreakerState.OPEN, circuitBreakerAsOracle.getScore(DESTINATION)];
 
-const fallbackOracle = new FallbackOracle([plainOracle, defaults], undefined, {
+const fallbackOracle = new FallbackOracle([plainOracle, detailedOracle], undefined, {
   explorationFactor: 1.5,
   discountFactor: 0.95,
   tierNames: ['a', 'b'],
@@ -166,24 +149,12 @@ const routing: TierRoutingDecision[] = [];
 const answered: number = 0;
 void [fallbackScore, routing, answered];
 
-const typedDetailed = typedFallbackOracle([detailedOracle, detailedOracle]);
-const typedDetailedAssertion: DetailedRiskOracle = typedDetailed;
-void typedDetailedAssertion.getScoreDetailed(DESTINATION);
-
-const typedMixed = typedFallbackOracle([detailedOracle, plainOracle]);
-// @ts-expect-error — a mixed chain is not statically DetailedRiskOracle.
-void typedMixed.getScoreDetailed(DESTINATION);
-
-type AllDetailedAll = ExpectTrue<AllDetailed<[DetailedRiskOracle, DetailedRiskOracle]>>;
-type AllDetailedMixed = ExpectTrue<AllDetailed<[DetailedRiskOracle]>>; // type-only smoke; see AllDetailed.type-test.ts
-export type { AllDetailedAll, AllDetailedMixed };
-
 // --- RiskOracleAggregator.
 
 const aggregatorSources: RiskOracleAggregatorSource[] = [
   { label: 'a', oracle: plainOracle },
-  { label: 'b', oracle: defaults },
-  { label: 'c', oracle: defaults },
+  { label: 'b', oracle: detailedOracle },
+  { label: 'c', oracle: detailedOracle },
 ];
 const aggregatorOptions: RiskOracleAggregatorOptions = {
   sources: aggregatorSources,
@@ -233,26 +204,11 @@ const isOracleError = [
 ].every((error) => error instanceof OracleError);
 void [quorumContext, errContext, isOracleError];
 
-// --- Rate-limit error + middleware option types.
-
-const denialDetails: RateLimitDenialDetails = {
-  budget: 10,
-  windowMs: 1_000,
-  contextId: 'ctx',
-  globalEstimate: 9,
-  fairShare: 10,
-  selfCount: 5,
-  reason: 'global-budget',
-};
-const rateLimitError: OracleRateLimitError = new OracleRateLimitError(DESTINATION, denialDetails);
-void [rateLimitError.details.reason, rateLimitError.message];
-
 // --- Middleware.
 
 const cacheOptions: CacheOptions = { ttlMs: 30_000, staleMs: 5_000 };
 const timeoutOptions: TimeoutOptions = { timeoutMs: 1_000 };
 const provenanceOptions: ProvenanceOracleOptions = { source: 'test', logger };
-const rateLimitOptions: RateLimitOptions = { budget: 10, windowMs: 1_000, contextId: 'ctx' };
 
 const middleware: OracleMiddleware = withCache(cacheOptions);
 const composed = compose(withCache(cacheOptions), withTimeout(timeoutOptions))(plainOracle);
@@ -262,19 +218,6 @@ const composedDetailed = compose(
 )(plainOracle);
 const detailedAssertion: DetailedRiskOracle = composedDetailed;
 void [middleware, composed.getScore(DESTINATION), detailedAssertion.getScoreDetailed(DESTINATION)];
-
-const fakeChannel: BroadcastChannelLike = {
-  postMessage: () => undefined,
-  addEventListener: () => undefined,
-};
-const withChannel: RateLimitOptions = { ...rateLimitOptions, channel: fakeChannel };
-const limited: RiskOracle = withRateLimit(withChannel)(plainOracle);
-void limited.getScore(DESTINATION);
-
-const bucketsA: BucketMap = new Map([[1, 2]]);
-const bucketsB: BucketMap = new Map([[1, 3]]);
-const merged: BucketMap = joinBucketMaps(bucketsA, bucketsB);
-void merged.size;
 
 // --- Fallback observer.
 

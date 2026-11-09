@@ -6,6 +6,8 @@ import { RiskOracle } from './RiskOracle';
  * Future logger implementations can implement this interface to
  * record degraded oracle behavior without coupling FallbackOracle
  * to a logging framework.
+ *
+ * @experimental
  */
 export interface FallbackObserver {
   /**

@@ -4,7 +4,6 @@ import {
   CoalescingOracle,
   compose,
   ContractIncompatibilityError,
-  DefaultOracle,
   FallbackOracle,
   InvalidDestinationError,
   Logger,
@@ -16,15 +15,15 @@ import {
   QuorumNotMetError,
   RiskOracleAggregator,
   SorobanOracle,
+  StellarRpcTransport,
+  createSorobanOracle,
   StubOracle,
   toBatchOracle,
-  typedFallbackOracle,
   UnrecognizedDestinationError,
   UnsupportedInterfaceVersionError,
   validateDestination,
   withCache,
   withProvenance,
-  withRateLimit,
   withTimeout,
 } from '../src';
 import { FakeSorobanRpcTransport, makeRawScoredResponse } from './support/FakeSorobanRpcTransport';
@@ -48,13 +47,13 @@ describe('public package entry point (src/index.ts)', () => {
   it('exposes the documented oracle implementations', () => {
     expect(typeof StubOracle).toBe('function');
     expect(typeof CoalescingOracle).toBe('function');
-    expect(typeof DefaultOracle).toBe('function');
     expect(typeof ProvenanceOracle).toBe('function');
     expect(typeof CircuitBreakerOracle).toBe('function');
     expect(typeof FallbackOracle).toBe('function');
     expect(typeof RiskOracleAggregator).toBe('function');
-    expect(typeof typedFallbackOracle).toBe('function');
     expect(typeof toBatchOracle).toBe('function');
+    expect(typeof StellarRpcTransport).toBe('function');
+    expect(typeof createSorobanOracle).toBe('function');
   });
 
   it('exposes the documented error taxonomy with stable codes', () => {
@@ -83,7 +82,6 @@ describe('public package entry point (src/index.ts)', () => {
       withCache({ ttlMs: 60_000 }),
       withProvenance({ source: 'smoke', logger: noopLogger }),
       withTimeout({ timeoutMs: 1_000 }),
-      withRateLimit({ budget: 100, windowMs: 1_000, contextId: 'smoke' }),
     )(new StubOracle());
 
     await expect(oracle.getScore(DESTINATION)).resolves.toBe(95);

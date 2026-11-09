@@ -4,6 +4,8 @@ import { withTimeout } from './middleware/withTimeout';
 
 /**
  * One source configured on a {@link RiskOracleAggregator}.
+ *
+ * @experimental
  */
 export interface RiskOracleAggregatorSource {
   /**
@@ -18,6 +20,8 @@ export interface RiskOracleAggregatorSource {
 
 /**
  * Construction options for {@link RiskOracleAggregator}.
+ *
+ * @experimental
  */
 export interface RiskOracleAggregatorOptions {
   /**
@@ -103,6 +107,8 @@ function clamp(value: number, lo: number, hi: number): number {
  *
  * @param values Reported scores, one per responding source.
  * @param weights Parallel array of positive weights, one per value.
+ *
+ * @experimental
  */
 export function weightedMedian(values: readonly number[], weights: readonly number[]): number {
   if (values.length === 0) {
@@ -120,7 +126,11 @@ export function weightedMedian(values: readonly number[], weights: readonly numb
   return values[order[order.length - 1]];
 }
 
-/** The honest-range clamp for a Byzantine-robust aggregate. */
+/**
+ * The honest-range clamp for a Byzantine-robust aggregate.
+ *
+ * @experimental
+ */
 export interface OrderBounds {
   /** Lower bound: the `(faultTolerance + 1)`-th smallest reported value. */
   lo: number;
@@ -149,6 +159,8 @@ export interface OrderBounds {
  * @param values Reported scores, one per responding source (`values.length`
  * must be `>= 2 * faultTolerance + 1` for the bounds to be meaningful).
  * @param faultTolerance Maximum number of Byzantine values assumed among `values`.
+ *
+ * @experimental
  */
 export function honestOrderBounds(values: readonly number[], faultTolerance: number): OrderBounds {
   const sorted = [...values].sort((a, b) => a - b);
@@ -183,6 +195,8 @@ export function honestOrderBounds(values: readonly number[], faultTolerance: num
  * @param values Reported scores, one per responding source.
  * @param center The point disagreement is measured against (the final aggregate).
  * @param faultTolerance Maximum number of Byzantine values assumed among `values`.
+ *
+ * @experimental
  */
 export function computeDisagreement(
   values: readonly number[],
@@ -242,6 +256,8 @@ export function computeDisagreement(
  * If fewer than `quorum` sources answer successfully — including the
  * zero-successful-sources case — `getScore`/`getScoreDetailed` reject with
  * {@link QuorumNotMetError}.
+ *
+ * @experimental
  */
 export class RiskOracleAggregator implements DetailedRiskOracle {
   private readonly sources: readonly RiskOracleAggregatorSource[];

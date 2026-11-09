@@ -1,7 +1,11 @@
 import { CircuitBreakerState } from './CircuitBreakerOracle';
 import { CacheStatus, DetailedRiskOracle, RiskOracle, ScoredResult } from './RiskOracle';
 import { FallbackObserver } from './FallbackObserver';
-import { CancellableRiskOracle, isCancellable, raceWithCancellation } from './CancellableRiskOracle';
+import {
+  CancellableRiskOracle,
+  isCancellable,
+  raceWithCancellation,
+} from './CancellableRiskOracle';
 import { OracleCancelledError } from './OracleError';
 
 /**
@@ -16,7 +20,11 @@ interface TierBelief {
   discountedSuccesses: number;
 }
 
-/** One tier's rank and belief snapshot for a single `getScore`/`getScoreDetailed` call. */
+/**
+ * One tier's rank and belief snapshot for a single `getScore`/`getScoreDetailed` call.
+ *
+ * @experimental
+ */
 export interface TierRoutingDecision {
   /** Index of this tier in the chain passed to the constructor. */
   tierIndex: number;
@@ -39,7 +47,11 @@ export interface TierRoutingDecision {
   learned: boolean;
 }
 
-/** `ScoredResult` enriched with the bandit's full routing decision for the call. */
+/**
+ * `ScoredResult` enriched with the bandit's full routing decision for the call.
+ *
+ * @experimental
+ */
 export interface FallbackScoredResult extends ScoredResult {
   /** Every tier in the chain, ranked richest-first as chosen for this call. */
   routingOrder: TierRoutingDecision[];
@@ -47,7 +59,11 @@ export interface FallbackScoredResult extends ScoredResult {
   answeredTierIndex: number;
 }
 
-/** Tunables for the routing bandit. See {@link FallbackOracle} for how to reason about them. */
+/**
+ * Tunables for the routing bandit. See {@link FallbackOracle} for how to reason about them.
+ *
+ * @experimental
+ */
 export interface FallbackBanditConfig {
   /**
    * Exploration constant (`c` in the UCB1 bonus `sqrt(c * ln(n) / n_i)`). Higher values make
@@ -144,6 +160,8 @@ function isDetailed(oracle: RiskOracle): oracle is DetailedRiskOracle {
  * `CancellableRiskOracle` has its own underlying request actually aborted;
  * a tier that doesn't still lets the caller bail out immediately without
  * waiting for it, exactly like `CircuitBreakerOracle`'s CLOSED path.
+ *
+ * @experimental
  */
 export class FallbackOracle implements DetailedRiskOracle, CancellableRiskOracle {
   private readonly beliefs: TierBelief[];
