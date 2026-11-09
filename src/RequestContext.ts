@@ -33,6 +33,8 @@ import { CacheControlUnsupportedError } from './OracleError';
  * requires or consumes a `RequestContext` today. It exists so new,
  * `RiskDecision`-aware call sites have one consistent way to carry this
  * plumbing instead of each inventing its own ad hoc options bag.
+ *
+ * @experimental
  */
 export interface RequestContext {
   /** Absolute epoch-ms instant by which this request (and everything it spawns) must complete. `Number.POSITIVE_INFINITY` means "no deadline." */
@@ -45,7 +47,11 @@ export interface RequestContext {
   readonly cache: CacheControl;
 }
 
-/** Cache-control intent carried by a {@link RequestContext}. */
+/**
+ * Cache-control intent carried by a {@link RequestContext}.
+ *
+ * @experimental
+ */
 export interface CacheControl {
   /** Skip any cache read for this request; a cache-aware callee that cannot skip its cache must reject via {@link CacheControlUnsupportedError} rather than silently serving a cached value. */
   readonly bypassCache: boolean;
@@ -53,7 +59,11 @@ export interface CacheControl {
   readonly revalidate: boolean;
 }
 
-/** Cache-control intent equivalent to not requesting anything special. */
+/**
+ * Cache-control intent equivalent to not requesting anything special.
+ *
+ * @experimental
+ */
 export const DEFAULT_CACHE_CONTROL: CacheControl = Object.freeze({
   bypassCache: false,
   revalidate: false,
@@ -68,7 +78,11 @@ function randomCorrelationId(): string {
   return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** Construction options for {@link createRequestContext}. */
+/**
+ * Construction options for {@link createRequestContext}.
+ *
+ * @experimental
+ */
 export interface CreateRequestContextOptions {
   /** Absolute epoch-ms deadline. Takes precedence over `timeoutMs` if both are given. */
   deadlineAt?: number;
@@ -98,6 +112,8 @@ export interface CreateRequestContextOptions {
  * explicit choice, not an accidentally-unbounded default: a caller that
  * wants a budget has to say so, exactly like a caller that wants
  * cache-control intent has to say so.
+ *
+ * @experimental
  */
 export function createRequestContext(options: CreateRequestContextOptions = {}): RequestContext {
   const now = options.now ?? Date.now;
@@ -128,6 +144,8 @@ export function createRequestContext(options: CreateRequestContextOptions = {}):
  * Never negative: a deadline already in the past yields `0`, not a
  * negative number a naive `setTimeout(fn, remaining)` caller might
  * misinterpret as "no timeout."
+ *
+ * @experimental
  */
 export function remainingBudgetMs(
   context: Pick<RequestContext, 'deadlineAt'>,
@@ -137,7 +155,11 @@ export function remainingBudgetMs(
   return Math.max(0, context.deadlineAt - now());
 }
 
-/** True when `context`'s deadline has already passed as of `now()`. */
+/**
+ * True when `context`'s deadline has already passed as of `now()`.
+ *
+ * @experimental
+ */
 export function isExpired(
   context: Pick<RequestContext, 'deadlineAt'>,
   now: () => number = Date.now,
@@ -152,6 +174,8 @@ export function isExpired(
  * while allowing overrides for the rest — most commonly a narrower
  * `AbortSignal` for one sub-call, or cache-control intent scoped to just
  * that sub-call.
+ *
+ * @experimental
  */
 export function deriveRequestContext(
   parent: RequestContext,
@@ -171,7 +195,11 @@ export function deriveRequestContext(
   });
 }
 
-/** Which cache-control capabilities a callee supports, for {@link requireCacheControlSupport}. */
+/**
+ * Which cache-control capabilities a callee supports, for {@link requireCacheControlSupport}.
+ *
+ * @experimental
+ */
 export interface CacheControlCapabilities {
   /** Whether this callee can skip a cache read entirely when asked. */
   supportsBypass: boolean;
@@ -185,6 +213,8 @@ export interface CacheControlCapabilities {
  * rather than letting a callee silently ignore `bypassCache`/`revalidate`
  * it cannot actually implement. A cache-unaware callee (no cache at all)
  * trivially honors both, since there is nothing to bypass or revalidate.
+ *
+ * @experimental
  */
 export function requireCacheControlSupport(
   context: Pick<RequestContext, 'cache'>,

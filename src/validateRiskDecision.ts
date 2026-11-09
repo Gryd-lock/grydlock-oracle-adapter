@@ -42,7 +42,11 @@ const VALID_OUTCOMES: readonly RiskDecisionOutcome[] = [
   'incompatible',
 ];
 
-/** Options for {@link validateRiskDecision}. */
+/**
+ * Options for {@link validateRiskDecision}.
+ *
+ * @experimental
+ */
 export interface ValidateRiskDecisionOptions {
   /** Clock returning epoch milliseconds, used to sanity-check timestamps aren't absurdly far in the future. Injectable for tests. */
   now?: () => number;
@@ -174,6 +178,8 @@ function requireNoScoreField(input: Record<string, unknown>, outcome: string): v
  * a version this validator supports.
  * @throws {RiskDecisionValidationError} If any other field is missing,
  * malformed, or the payload is internally contradictory.
+ *
+ * @experimental
  */
 export function validateRiskDecision(
   input: unknown,
@@ -351,7 +357,11 @@ function validateAtDepth(
   }
 }
 
-/** True when `input` passes {@link validateRiskDecision} without throwing. Never throws itself. */
+/**
+ * True when `input` passes {@link validateRiskDecision} without throwing. Never throws itself.
+ *
+ * @experimental
+ */
 export function isValidRiskDecision(
   input: unknown,
   options?: ValidateRiskDecisionOptions,

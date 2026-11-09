@@ -12,6 +12,8 @@ import { ProvenanceOracle, ProvenanceOracleOptions } from '../ProvenanceOracle';
  * from a detail-preserving or plain-only middleware, and
  * `tests/type-tests/OracleMiddleware.type-test.ts` for compose chains built
  * from it.
+ *
+ * @experimental
  */
 export function withProvenance(
   options?: ProvenanceOracleOptions,

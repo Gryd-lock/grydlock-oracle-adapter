@@ -3,6 +3,8 @@ import { Logger, noopLogger } from './Logger';
 
 /**
  * One destination to score as part of a batch call.
+ *
+ * @experimental
  */
 export interface BatchDestinationRequest {
   /** A Stellar address or asset identifier. */
@@ -15,7 +17,11 @@ export interface BatchDestinationRequest {
   priority?: number;
 }
 
-/** Per-call options for a batch request. */
+/**
+ * Per-call options for a batch request.
+ *
+ * @experimental
+ */
 export interface BatchCallOptions {
   /**
    * Milliseconds from now by which the batch should ideally finish. Items
@@ -26,10 +32,18 @@ export interface BatchCallOptions {
   deadlineMs: number;
 }
 
-/** How one destination's batch item was ultimately resolved. */
+/**
+ * How one destination's batch item was ultimately resolved.
+ *
+ * @experimental
+ */
 export type BatchItemStatus = 'fulfilled' | 'rejected' | 'deadline-rejected';
 
-/** The individually-recoverable outcome of one destination in a batch. */
+/**
+ * The individually-recoverable outcome of one destination in a batch.
+ *
+ * @experimental
+ */
 export interface BatchItemResult {
   /** The destination this result corresponds to, matching the original request. */
   destination: string;
@@ -41,7 +55,11 @@ export interface BatchItemResult {
   error?: unknown;
 }
 
-/** The outcome of one `getScores` call, one entry per requested destination. */
+/**
+ * The outcome of one `getScores` call, one entry per requested destination.
+ *
+ * @experimental
+ */
 export interface BatchResult {
   /** Same length and order as the input `requests`, one entry per request. */
   results: BatchItemResult[];
@@ -50,13 +68,19 @@ export interface BatchResult {
 /**
  * Additive batch-scoring capability. Implementations must not require
  * changes to `RiskOracle`/`DetailedRiskOracle` consumers.
+ *
+ * @experimental
  */
 export interface BatchRiskOracle {
   /** Scores every requested destination, subject to `options`'s deadline. */
   getScores(requests: BatchDestinationRequest[], options: BatchCallOptions): Promise<BatchResult>;
 }
 
-/** Tunables for {@link toBatchOracle}. */
+/**
+ * Tunables for {@link toBatchOracle}.
+ *
+ * @experimental
+ */
 export interface BatchRiskOracleOptions {
   /** Hard cap on concurrent in-flight calls to the wrapped oracle. */
   maxConcurrency: number;
@@ -412,6 +436,8 @@ class BatchRiskOracleAdapter implements BatchRiskOracle {
  * existing `getScore` contract, so this works transparently over any
  * existing `RiskOracle`, including decorators like `CoalescingOracle` or
  * `CircuitBreakerOracle`.
+ *
+ * @experimental
  */
 export function toBatchOracle(
   oracle: RiskOracle,

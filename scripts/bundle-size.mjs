@@ -73,10 +73,29 @@ const CHECKS = [
     //
     // Both raises land together here: with the Soroban scaffold and the
     // RiskDecision contract both in the barrel, measured ~53.6 KB minified.
-    budgetBytes: 55 * KB,
+    //
+    // Raised to 58 KB for the live StellarRpcTransport + createSorobanOracle,
+    // partly offset by removing withRateLimit, typedFallbackOracle/AllDetailed
+    // and DefaultOracle (measured ~55.7 KB minified, SDK external).
+    budgetBytes: 58 * KB,
     allowedInputs: null, // the whole package — no allowlist to enforce
   },
+  {
+    name: 'live Soroban client',
+    entry: `export { createSorobanOracle, GRYDLOCK_TESTNET } from './src/index.ts';`,
+    // SorobanOracle + StellarRpcTransport and what they validate with.
+    // @stellar/stellar-sdk is external (see EXTERNAL below), so this measures
+    // only this package's own code on top of the SDK the consumer installs.
+    budgetBytes: 30 * KB,
+    allowedInputs: null,
+  },
 ];
+
+// Runtime dependencies are not this package's bytes: scripts/build.mjs keeps
+// them external too, and the consumer's bundler resolves (and dedupes) them.
+// Without this, the first src/ module to import @stellar/stellar-sdk
+// (StellarRpcTransport) would add ~300 KB of SDK to every measurement.
+const EXTERNAL = ['@stellar/stellar-sdk'];
 
 async function measure(check) {
   const result = await build({
@@ -92,6 +111,7 @@ async function measure(check) {
     platform: 'browser',
     target: 'es2020',
     write: false,
+    external: EXTERNAL,
     metafile: true,
     outfile: 'bundle.js',
     logLevel: 'silent',

@@ -11,6 +11,8 @@ import { Logger, noopLogger } from './Logger';
  * Structured audit record emitted for every score resolved (or failed)
  * through a ProvenanceOracle. Answers "why did the user see this score"
  * after the fact.
+ *
+ * @experimental
  */
 export interface ScoreProvenance {
   /** Discriminant tag identifying this record shape in a log stream. */
@@ -33,7 +35,11 @@ export interface ScoreProvenance {
   error?: string;
 }
 
-/** Options controlling a {@link ProvenanceOracle}. */
+/**
+ * Options controlling a {@link ProvenanceOracle}.
+ *
+ * @experimental
+ */
 export interface ProvenanceOracleOptions {
   /**
    * Label used as the provenance source when the wrapped oracle cannot
@@ -67,6 +73,8 @@ function isDetailed(oracle: RiskOracle): oracle is DetailedRiskOracle {
  * If the wrapped oracle implements getScoreDetailed (see DetailedRiskOracle),
  * its reported source and cache status are used; otherwise the record falls
  * back to the configured source label and an "unknown" cache status.
+ *
+ * @experimental
  */
 export class ProvenanceOracle implements DetailedRiskOracle {
   private readonly inner: RiskOracle;

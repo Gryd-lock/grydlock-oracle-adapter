@@ -18,13 +18,25 @@ import { OracleSource } from './RiskOracle';
  * `RiskDecision` values is opt-in for new call sites.
  */
 
-/** This module's schema/protocol version. Bump on any breaking change to `RiskDecision`'s shape. */
+/**
+ * This module's schema/protocol version. Bump on any breaking change to `RiskDecision`'s shape.
+ *
+ * @experimental
+ */
 export const RISK_DECISION_SCHEMA_VERSION = 1;
 
-/** The type of {@link RISK_DECISION_SCHEMA_VERSION} — every `RiskDecision` this package produces carries exactly this value. */
+/**
+ * The type of {@link RISK_DECISION_SCHEMA_VERSION} — every `RiskDecision` this package produces carries exactly this value.
+ *
+ * @experimental
+ */
 export type RiskDecisionSchemaVersion = typeof RISK_DECISION_SCHEMA_VERSION;
 
-/** The discriminant every `RiskDecision` variant carries under `outcome`. */
+/**
+ * The discriminant every `RiskDecision` variant carries under `outcome`.
+ *
+ * @experimental
+ */
 export type RiskDecisionOutcome =
   'verified' | 'unscored' | 'degraded' | 'policy-blocked' | 'unavailable' | 'incompatible';
 
@@ -46,6 +58,8 @@ interface RiskDecisionBase<Outcome extends RiskDecisionOutcome> {
  * Evidence was validated and is fresh enough to be used as-is: a score
  * exists, it passed runtime validation, and nothing flags it as stale or
  * policy-vetoed.
+ *
+ * @experimental
  */
 export interface VerifiedRiskDecision extends RiskDecisionBase<'verified'> {
   /** Risk score, integer 0-100 inclusive (higher = higher suspected risk). */
@@ -72,6 +86,8 @@ export interface VerifiedRiskDecision extends RiskDecisionBase<'verified'> {
  * Collapsing this into a numeric default (as `StubOracle`/`DefaultOracle`
  * do today, matching `RiskOracle`'s numbers-only contract) hides the
  * difference between "known safe" and "not evaluated" from the caller.
+ *
+ * @experimental
  */
 export interface UnscoredRiskDecision extends RiskDecisionBase<'unscored'> {
   /** Stable machine-readable reason code, when the source reports one. */
@@ -83,6 +99,8 @@ export interface UnscoredRiskDecision extends RiskDecisionBase<'unscored'> {
  * insufficiently fresh — still returned (a degraded answer can be better
  * than none), but explicitly flagged so a caller never silently treats it
  * as `verified`.
+ *
+ * @experimental
  */
 export interface DegradedRiskDecision extends RiskDecisionBase<'degraded'> {
   /** Risk score, integer 0-100 inclusive, as reported despite the degradation. */
@@ -102,6 +120,8 @@ export interface DegradedRiskDecision extends RiskDecisionBase<'degraded'> {
  * exists to enforce. `underlying` carries the raw evidence decision the
  * policy acted on, when there was one, so a caller can still inspect what
  * the evidence itself said.
+ *
+ * @experimental
  */
 export interface PolicyBlockedRiskDecision extends RiskDecisionBase<'policy-blocked'> {
   /** Stable machine-readable identifier of the policy rule that vetoed this destination. */
@@ -110,7 +130,11 @@ export interface PolicyBlockedRiskDecision extends RiskDecisionBase<'policy-bloc
   underlying?: VerifiedRiskDecision | DegradedRiskDecision | UnscoredRiskDecision;
 }
 
-/** The source could not be reached, or the request failed/timed out/was cancelled before evidence was obtained. */
+/**
+ * The source could not be reached, or the request failed/timed out/was cancelled before evidence was obtained.
+ *
+ * @experimental
+ */
 export interface UnavailableRiskDecision extends RiskDecisionBase<'unavailable'> {
   /** Stable machine-readable failure reason. */
   reason: 'timeout' | 'transport-error' | 'cancelled' | (string & {});
@@ -121,6 +145,8 @@ export interface UnavailableRiskDecision extends RiskDecisionBase<'unavailable'>
  * protocol shape) this package does not support. Distinct from
  * `unavailable`: the source answered, but the answer can't be trusted to
  * mean what this contract expects it to mean.
+ *
+ * @experimental
  */
 export interface IncompatibleRiskDecision extends RiskDecisionBase<'incompatible'> {
   /** The schema/protocol version actually reported by the source, when known. */
@@ -135,6 +161,8 @@ export interface IncompatibleRiskDecision extends RiskDecisionBase<'incompatible
  * compile error if any variant is left unhandled (each `case` must return,
  * so an uncovered variant leaves a code path that doesn't — see
  * `tests/type-tests/RiskDecision.type-test.ts`).
+ *
+ * @experimental
  */
 export type RiskDecision =
   | VerifiedRiskDecision
@@ -144,10 +172,18 @@ export type RiskDecision =
   | UnavailableRiskDecision
   | IncompatibleRiskDecision;
 
-/** The `outcome` variants that carry a numeric `score` field. */
+/**
+ * The `outcome` variants that carry a numeric `score` field.
+ *
+ * @experimental
+ */
 export type ScoredRiskDecision = VerifiedRiskDecision | DegradedRiskDecision;
 
-/** True when `decision` carries a numeric `score` (`verified` or `degraded`). */
+/**
+ * True when `decision` carries a numeric `score` (`verified` or `degraded`).
+ *
+ * @experimental
+ */
 export function isScoredRiskDecision(decision: RiskDecision): decision is ScoredRiskDecision {
   return decision.outcome === 'verified' || decision.outcome === 'degraded';
 }

@@ -35,15 +35,25 @@ import { RiskDecision, RiskDecisionOutcome } from './RiskDecision';
  * destination itself ever being the join key.
  */
 
-/** This module's schema version. Bump on any breaking change to {@link RiskDecisionProvenanceEvent}'s shape. */
+/**
+ * This module's schema version. Bump on any breaking change to {@link RiskDecisionProvenanceEvent}'s shape.
+ *
+ * @experimental
+ */
 export const RISK_DECISION_PROVENANCE_SCHEMA_VERSION = 1;
 
-/** The type of {@link RISK_DECISION_PROVENANCE_SCHEMA_VERSION}. */
+/**
+ * The type of {@link RISK_DECISION_PROVENANCE_SCHEMA_VERSION}.
+ *
+ * @experimental
+ */
 export type RiskDecisionProvenanceSchemaVersion = typeof RISK_DECISION_PROVENANCE_SCHEMA_VERSION;
 
 /**
  * Structured, privacy-safe audit record for one resolved {@link RiskDecision}.
  * See the module doc for exactly what is and isn't in here by default.
+ *
+ * @experimental
  */
 export interface RiskDecisionProvenanceEvent {
   /** Discriminant tag identifying this record shape in a log stream. */
@@ -90,7 +100,11 @@ export interface RiskDecisionProvenanceEvent {
   rawErrorDetail?: string;
 }
 
-/** Controls what {@link createRiskDecisionProvenanceEvent} includes beyond the privacy-safe default. Every field defaults to `false` — nothing extra is included unless explicitly opted in. */
+/**
+ * Controls what {@link createRiskDecisionProvenanceEvent} includes beyond the privacy-safe default. Every field defaults to `false` — nothing extra is included unless explicitly opted in.
+ *
+ * @experimental
+ */
 export interface RiskDecisionRedactionOptions {
   /** Include a salted, one-way pseudonymized reference to the destination. Requires `destinationSalt`. */
   includePseudonymizedDestination?: boolean;
@@ -117,7 +131,11 @@ export interface RiskDecisionRedactionOptions {
   includeRawError?: boolean;
 }
 
-/** Non-cryptographic input to {@link createRiskDecisionProvenanceEvent} beyond the decision itself. */
+/**
+ * Non-cryptographic input to {@link createRiskDecisionProvenanceEvent} beyond the decision itself.
+ *
+ * @experimental
+ */
 export interface RiskDecisionProvenanceMeta {
   /** Stable request identity — typically a `RequestContext.correlationId`. Never the destination. */
   correlationId: string;
@@ -144,6 +162,8 @@ const RAW_ERROR_DETAIL_MAX_LENGTH = 200;
  * destination be correlated by a log consumer without that consumer ever
  * seeing the destination itself — not to withstand a targeted
  * de-anonymization attempt. See `PRIVACY_PROVENANCE.md`.
+ *
+ * @experimental
  */
 export function pseudonymizeDestination(destination: string, salt: string): string {
   const input = `${salt} ${destination}`;
@@ -193,6 +213,8 @@ function outcomeScore(decision: RiskDecision): number | undefined {
  * Builds a privacy-safe {@link RiskDecisionProvenanceEvent} for `decision`.
  * See the module doc for exactly what's included by default and how to opt
  * into more via `redaction`.
+ *
+ * @experimental
  */
 export function createRiskDecisionProvenanceEvent(
   decision: RiskDecision,
@@ -235,7 +257,11 @@ export function createRiskDecisionProvenanceEvent(
   return event;
 }
 
-/** Maps a {@link RiskDecisionProvenanceEvent}'s outcome to a `Logger` severity: `error` for unavailable/incompatible, `warn` for degraded/policy-blocked, `info` otherwise. */
+/**
+ * Maps a {@link RiskDecisionProvenanceEvent}'s outcome to a `Logger` severity: `error` for unavailable/incompatible, `warn` for degraded/policy-blocked, `info` otherwise.
+ *
+ * @experimental
+ */
 export function riskDecisionLogLevel(outcome: RiskDecisionOutcome): 'info' | 'warn' | 'error' {
   switch (outcome) {
     case 'unavailable':
@@ -250,7 +276,11 @@ export function riskDecisionLogLevel(outcome: RiskDecisionOutcome): 'info' | 'wa
   }
 }
 
-/** Emits `event` through `logger` at the severity {@link riskDecisionLogLevel} assigns its outcome. */
+/**
+ * Emits `event` through `logger` at the severity {@link riskDecisionLogLevel} assigns its outcome.
+ *
+ * @experimental
+ */
 export function emitRiskDecisionProvenance(
   logger: Logger,
   event: RiskDecisionProvenanceEvent,

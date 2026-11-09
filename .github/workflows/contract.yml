@@ -1,0 +1,47 @@
+name: Contract
+
+# Unit tests, lints and a wasm build for the reference Soroban contract.
+on:
+  pull_request:
+    paths:
+      - 'contract/**'
+      - '.github/workflows/contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'contract/**'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: contract
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contract
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      # soroban-sdk >= 25 refuses a plain `cargo build` for wasm and requires
+      # the Stellar CLI's build wrapper. Pinned to the version used for the
+      # testnet deployment.
+      - name: Install Stellar CLI
+        env:
+          STELLAR_CLI_VERSION: 30.0.1
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/stellar.tgz" \
+            "https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          tar -xzf "$RUNNER_TEMP/stellar.tgz" -C "$RUNNER_TEMP" stellar
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - run: stellar contract build

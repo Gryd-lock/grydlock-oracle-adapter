@@ -30,7 +30,7 @@ const PKG_NAME = 'grydlock-oracle-adapter';
 // kept in sync with src/index.ts by hand, since a build-time diff against
 // the source barrel would need TypeScript's own type information to do
 // properly, which esbuild's bundling here does not have. Type-only exports
-// (every plain `interface`/`type`, e.g. AllDetailed) are deliberately
+// (every plain `interface`/`type`, e.g. RiskOracle) are deliberately
 // excluded: they compile away entirely and never exist on the built
 // module's runtime export object, so an `in` check on one would always
 // fail here regardless of whether the source-level re-export is correct.
@@ -61,12 +61,10 @@ const EXPECTED_EXPORTS = [
   'ContractIncompatibilityError',
   'QuorumNotMetError',
   'CoalescingOracle',
-  'DefaultOracle',
   'CircuitBreakerOracle',
   'CircuitBreakerState',
   'defaultIsInfrastructureError',
   'FallbackOracle',
-  'typedFallbackOracle',
   'RiskOracleAggregator',
   'weightedMedian',
   'honestOrderBounds',
@@ -75,9 +73,10 @@ const EXPECTED_EXPORTS = [
   'withCache',
   'withTimeout',
   'withProvenance',
-  'withRateLimit',
-  'OracleRateLimitError',
-  'joinBucketMaps',
+  'SorobanOracle',
+  'StellarRpcTransport',
+  'createSorobanOracle',
+  'GRYDLOCK_TESTNET',
 ];
 
 function assertExports(label, moduleExports) {
@@ -89,7 +88,14 @@ function assertExports(label, moduleExports) {
 }
 
 async function functionalSmokeCheck(label, moduleExports) {
-  const { StubOracle, DefaultOracle, CoalescingOracle, compose, withProvenance } = moduleExports;
+  const {
+    StubOracle,
+    CoalescingOracle,
+    compose,
+    withProvenance,
+    createSorobanOracle,
+    GRYDLOCK_TESTNET,
+  } = moduleExports;
   const oracle = compose(withProvenance())(new CoalescingOracle(new StubOracle()));
   const result = await oracle.getScoreDetailed(
     'GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET',
@@ -97,10 +103,8 @@ async function functionalSmokeCheck(label, moduleExports) {
   if (typeof result.score !== 'number') {
     throw new Error(`${label}: composed oracle call did not return a numeric score`);
   }
-  const fallback = new DefaultOracle(7);
-  if ((await fallback.getScore('anything')) !== 7) {
-    throw new Error(`${label}: DefaultOracle did not return its configured score`);
-  }
+  // Constructing the live client must not touch the network.
+  createSorobanOracle({ ...GRYDLOCK_TESTNET, environment: 'test' });
   console.log(`  ok: composed oracle round-trip returned score=${result.score}`);
 }
 
@@ -142,7 +146,9 @@ async function checkBundlerConsumption() {
 
 async function main() {
   if (!existsSync('dist/esm/index.js') || !existsSync('dist/cjs/index.js')) {
-    console.error('dist/ not found or incomplete — run `npm run build` before `npm run test:smoke`.');
+    console.error(
+      'dist/ not found or incomplete — run `npm run build` before `npm run test:smoke`.',
+    );
     process.exit(1);
   }
 

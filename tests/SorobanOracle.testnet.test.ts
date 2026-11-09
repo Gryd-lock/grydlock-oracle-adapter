@@ -1,32 +1,114 @@
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import {
+  ContractIncompatibilityError,
+  GRYDLOCK_TESTNET,
+  OracleTimeoutError,
+  UnrecognizedDestinationError,
+  WrongNetworkError,
+  createSorobanOracle,
+} from '../src';
+import deployment from '../contract/deployments/testnet.json';
 
 /**
- * Gated live-testnet check for `SorobanOracle`.
+ * Live check against the reference contract deployed on Stellar testnet
+ * (contract/deployments/testnet.json). It makes real Soroban RPC calls, so
+ * it is skipped unless you opt in:
  *
- * This is intentionally NOT exercised by this PR or by CI: it needs a real
- * deployed Soroban risk-oracle contract on testnet matching the protocol in
- * docs/adr/0001-soroban-oracle-protocol.md, and — since this PR ships only
- * the `SorobanRpcTransport` interface, not a real network implementation of
- * it (see that ADR's "Scope of this increment") — a `'live'` transport to
- * drive it with. Neither exists in this environment yet; wiring both up is
- * tracked by the epic's dependent issues (#1, #2, #3, #4, #15, #22, #66,
- * #90, #92), not by this increment.
+ *   GRYDLOCK_LIVE_TESTNET=1 npx vitest run tests/SorobanOracle.testnet.test.ts
  *
- * Once both exist, set `GRYDLOCK_TESTNET_CONTRACT_ID` to the deployed
- * contract's id to un-skip this suite locally. Until then it no-ops.
+ * Setting GRYDLOCK_TESTNET_CONTRACT_ID also opts in, and points the suite at
+ * that contract instead. It must be seeded from the same scores.json. CI runs
+ * this nightly (.github/workflows/testnet-nightly.yml) instead of on every PR,
+ * so a testnet outage can't block merges.
  */
-const testnetContractId = process.env.GRYDLOCK_TESTNET_CONTRACT_ID;
+const overrideContractId = process.env.GRYDLOCK_TESTNET_CONTRACT_ID;
+const enabled = process.env.GRYDLOCK_LIVE_TESTNET === '1' || Boolean(overrideContractId);
+const contractId = overrideContractId ?? deployment.contractId;
+const target = { ...GRYDLOCK_TESTNET, contractId };
+const seeded = deployment.seeded as Record<string, number>;
 
-describe.skipIf(!testnetContractId)('SorobanOracle (live testnet)', () => {
-  it('reads a real score from the deployed contract', () => {
-    // Intentionally unimplemented: exercising this requires both a real
-    // SorobanRpcTransport (@stellar/stellar-sdk-backed) and a deployed
-    // contract to point it at, neither of which exist in this repo yet.
-    // This test exists as the wiring point for whoever lands that work —
-    // see the file doc comment above.
-    throw new Error(
-      'GRYDLOCK_TESTNET_CONTRACT_ID is set, but this suite has no live SorobanRpcTransport ' +
-        "implementation to run it against yet — see this file's doc comment.",
-    );
-  });
+/** A valid account the seed data never mentions. */
+const UNSEEDED_ACCOUNT = 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H';
+
+const LIVE_TIMEOUT_MS = 30_000;
+
+describe.skipIf(!enabled)('SorobanOracle (live testnet)', () => {
+  const oracle = createSorobanOracle({ ...target, environment: 'test', requestBudgetMs: 20_000 });
+
+  it(
+    'reads a seeded account score with full provenance',
+    async () => {
+      const [destination, expected] = Object.entries(seeded).find(([key]) => key.startsWith('G'))!;
+      const result = await oracle.getScoreDetailed(destination);
+
+      expect(result.score).toBe(expected);
+      expect(result.source).toBe('SorobanOracle');
+      expect(result.contractId).toBe(contractId);
+      expect(result.networkPassphrase).toBe(GRYDLOCK_TESTNET.networkPassphrase);
+      expect(result.interfaceVersion).toBe(1);
+      expect(result.ledgerSequence).toBeGreaterThan(0);
+      expect(result.observedConfirmations).toBeGreaterThanOrEqual(1);
+      expect(result.ledgerCloseTimeUnixMs).toBeLessThanOrEqual(Date.now());
+      // Seeded once, so it goes stale after DEFAULT_SOROBAN_FINALITY_POLICY's 7 days.
+      expect(['live', 'cache-stale']).toContain(result.cacheStatus);
+    },
+    LIVE_TIMEOUT_MS,
+  );
+
+  it(
+    'reads a seeded SEP-11 asset score',
+    async () => {
+      const asset = Object.keys(seeded).find((key) => key.includes(':'));
+      expect(asset).toBeDefined();
+      expect(await oracle.getScore(asset!)).toBe(seeded[asset!]);
+    },
+    LIVE_TIMEOUT_MS,
+  );
+
+  it(
+    'reports an unseeded destination as unrecognized, not as a number',
+    async () => {
+      await expect(oracle.getScore(UNSEEDED_ACCOUNT)).rejects.toBeInstanceOf(
+        UnrecognizedDestinationError,
+      );
+    },
+    LIVE_TIMEOUT_MS,
+  );
+
+  it(
+    'refuses to read when configured for a different network',
+    async () => {
+      const mainnet = createSorobanOracle({
+        ...target,
+        networkPassphrase: 'Public Global Stellar Network ; September 2015',
+        environment: 'test',
+      });
+      await expect(mainnet.getScore(UNSEEDED_ACCOUNT)).rejects.toBeInstanceOf(WrongNetworkError);
+    },
+    LIVE_TIMEOUT_MS,
+  );
+
+  it(
+    'reports a contract id with no deployed instance as CONTRACT_NOT_FOUND',
+    async () => {
+      const missing = createSorobanOracle({
+        ...target,
+        contractId: 'CAEQSCIJBEEQSCIJBEEQSCIJBEEQSCIJBEEQSCIJBEEQSCIJBEEQTD2L',
+        environment: 'test',
+      });
+      const error = await missing.getScore(UNSEEDED_ACCOUNT).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ContractIncompatibilityError);
+      expect((error as ContractIncompatibilityError).code).toBe('CONTRACT_NOT_FOUND');
+    },
+    LIVE_TIMEOUT_MS,
+  );
+
+  it(
+    'surfaces an exhausted budget as OracleTimeoutError',
+    async () => {
+      const impatient = createSorobanOracle({ ...target, environment: 'test', requestBudgetMs: 1 });
+      await expect(impatient.getScore(UNSEEDED_ACCOUNT)).rejects.toBeInstanceOf(OracleTimeoutError);
+    },
+    LIVE_TIMEOUT_MS,
+  );
 });

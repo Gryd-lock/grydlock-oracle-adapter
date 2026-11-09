@@ -12,7 +12,7 @@ outcome that isn't "here is a trustworthy score" has to be squeezed into
 that same number, or into an exception nobody is required to catch
 differently. In practice this repo already does that squeezing:
 
-- `StubOracle`/`DefaultOracle` return `0` for a destination they've never
+- `StubOracle` returns `0` for a destination it has never
   heard of — indistinguishable, to a caller, from a destination that was
   actually evaluated and found to be zero-risk.
 - Cache/fallback/aggregator timestamp semantics differ subtly across
@@ -49,11 +49,11 @@ The adapter converts a `RiskDecision` to a number for exactly two outcomes:
 | `incompatible`   | **No** — throws `ContractIncompatibilityError`          |
 | `policy-blocked` | **No** — throws `ContractIncompatibilityError`          |
 
-This is deliberately the opposite of what `StubOracle`/`DefaultOracle` do
-today. Those existing implementations are consumer-facing endpoints that
-have to produce _some_ number because that's the entire contract they
+This is deliberately the opposite of what `StubOracle` does
+today. That implementation is a consumer-facing endpoint that
+has to produce _some_ number because that's the entire contract it
 implement — defaulting to `0` there is a reasonable, honestly-documented
-choice given what `RiskOracle` allows them to express. `toLegacyScore` is
+choice given what `RiskOracle` allows it to express. `toLegacyScore` is
 different: it sits between a _richer_ source (one that already knows the
 difference between "unscored" and "unavailable") and a _narrower_ consumer.
 Silently choosing a number in that position — e.g. mapping `unscored` to
