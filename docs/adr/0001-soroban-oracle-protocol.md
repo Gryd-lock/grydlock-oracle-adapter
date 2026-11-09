@@ -6,6 +6,22 @@ Accepted (foundational increment). This ADR defines the protocol `SorobanOracle`
 (`src/SorobanOracle.ts`) targets and validates against. It does **not** claim a live,
 network-connected oracle client exists yet — see [Scope of this increment](#scope-of-this-increment).
 
+**Update (follow-up increment):** two of the items this ADR listed as out of scope now exist. One
+is a live transport, `StellarRpcTransport` (`src/StellarRpcTransport.ts`). The other is a reference
+contract deployed to testnet (`contract/`,
+`CA42XDMAPI3QXA4XP6HEBPWD3IHZQ3YJB4MABSURASGGOVYU5QCWSC2M`). The contract's wire shape is
+`get_score(Target) -> (Score, LedgerStamp, u32)`, and the transport maps it onto
+`SorobanRawResponse`:
+
+- `Score` maps to `outcome`.
+- `LedgerStamp.sequence` maps to `ledger.sequence`, and `LedgerStamp.timestamp` (seconds, times
+  1000) maps to `ledger.closeTimeUnixMs`.
+- The simulation's `latestLedger` maps to `ledger.latestSeenSequence`.
+- The RPC node's own `getNetwork` passphrase maps to `networkPassphrase`.
+
+The rest of this ADR, including the multi-endpoint failover non-goal, is unchanged.
+`contract/README.md` is the interface reference.
+
 ## Context
 
 The audit behind issue #109 found three problems with the state of this repo:
