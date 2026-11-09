@@ -1,3 +1,24 @@
+# [2.0.0](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.3.0...v2.0.0) (2026-11-09)
+
+
+* refactor!: remove unused rate-limit, typed-fallback and default oracles; mark the rest experimental ([53dbc0f](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/53dbc0f64cd4e5953e1d3004d7df0d833c949e31))
+
+
+### Features
+
+* **contract:** add reference Soroban risk-oracle contract and testnet deploy script ([3568216](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/356821608f286f5e3f0167845eb36c4be1fac19b))
+* **soroban:** add live StellarRpcTransport and createSorobanOracle factory ([87ffa78](https://github.com/Gryd-lock/grydlock-oracle-adapter/commit/87ffa7830864d353f02745a9bfcbaa5834f2a3ed))
+
+
+### BREAKING CHANGES
+
+* withRateLimit, OracleRateLimitError, RateLimitOptions,
+RateLimitDenialDetails, BroadcastChannelLike, BucketMap, joinBucketMaps,
+typedFallbackOracle, AllDetailed, ElementIsDetailed and DefaultOracle are
+no longer exported.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
 # [1.3.0](https://github.com/Gryd-lock/grydlock-oracle-adapter/compare/v1.2.0...v1.3.0) (2026-08-30)
 
 
