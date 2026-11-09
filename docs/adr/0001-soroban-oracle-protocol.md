@@ -14,8 +14,7 @@ contract deployed to testnet (`contract/`,
 `SorobanRawResponse`:
 
 - `Score` maps to `outcome`.
-- `LedgerStamp.sequence` maps to `ledger.sequence`, and `LedgerStamp.timestamp` (seconds, times
-  1000) maps to `ledger.closeTimeUnixMs`.
+- `LedgerStamp.sequence` maps to `ledger.sequence`, and `LedgerStamp.timestamp` (seconds, times 1000) maps to `ledger.closeTimeUnixMs`.
 - The simulation's `latestLedger` maps to `ledger.latestSeenSequence`.
 - The RPC node's own `getNetwork` passphrase maps to `networkPassphrase`.
 
@@ -148,11 +147,11 @@ Three situations look similar from the outside ("I asked, and got nothing usable
 very different things, and this protocol keeps them distinguishable all the way out to the typed
 error the caller catches:
 
-| Situation | Meaning | Result |
-| --- | --- | --- |
-| **No score exists** | The oracle has evaluated this destination and, as a considered, authoritative answer, has no risk opinion to report (e.g. explicitly out of scope). This is a permanent, semantic answer from the contract itself. | `outcome.variant === 'unscored'` → `UnrecognizedDestinationError` (reusing the existing "valid destination, not recognized" error — its meaning already matches exactly) |
-| **Not yet computed** | The oracle knows about the destination and is tracking it, but scoring hasn't finished (e.g. queued, awaiting more on-chain history). This may resolve to an actual score later. | `outcome.variant === 'pending'` → `ScoreNotYetComputedError` (new) |
-| **Provider failure** | The adapter could not get *any* answer — the transport itself failed (RPC unreachable, timed out, or was cancelled) before a contract response existed to interpret at all. | `OracleUnavailableError` / `OracleTimeoutError` / `OracleCancelledError` (existing), thrown directly from the transport call, never reaching schema decoding |
+| Situation            | Meaning                                                                                                                                                                                                            | Result                                                                                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **No score exists**  | The oracle has evaluated this destination and, as a considered, authoritative answer, has no risk opinion to report (e.g. explicitly out of scope). This is a permanent, semantic answer from the contract itself. | `outcome.variant === 'unscored'` → `UnrecognizedDestinationError` (reusing the existing "valid destination, not recognized" error — its meaning already matches exactly) |
+| **Not yet computed** | The oracle knows about the destination and is tracking it, but scoring hasn't finished (e.g. queued, awaiting more on-chain history). This may resolve to an actual score later.                                   | `outcome.variant === 'pending'` → `ScoreNotYetComputedError` (new)                                                                                                       |
+| **Provider failure** | The adapter could not get _any_ answer — the transport itself failed (RPC unreachable, timed out, or was cancelled) before a contract response existed to interpret at all.                                        | `OracleUnavailableError` / `OracleTimeoutError` / `OracleCancelledError` (existing), thrown directly from the transport call, never reaching schema decoding             |
 
 Critically: **none of these three ever produce a numeric score.** Each is a distinct thrown error.
 This is the direct fix for the `StubOracle` anti-pattern described in Context: a caller cannot
@@ -192,8 +191,8 @@ ledger.sequence)` and classifies every `scored` response into exactly one of thr
   because a not-yet-final answer, silently returned, is indistinguishable from a fully trustworthy
   one — the same anti-pattern as `StubOracle`'s default, just at the ledger layer instead of the
   destination layer.
-- **Live/verified** — enough confirmations have elapsed *and* `now - ledger.closeTimeUnixMs <=
-  maxResultAgeMs`. Reported as `cacheStatus: 'live'`.
+- **Live/verified** — enough confirmations have elapsed _and_ `now - ledger.closeTimeUnixMs <=
+maxResultAgeMs`. Reported as `cacheStatus: 'live'`.
 - **Stale** — enough confirmations have elapsed, but the ledger is older than
   `maxResultAgeMs`. Unlike "insufficiently final," this is still returned — the data is settled,
   just possibly outdated — but downgraded to `cacheStatus: 'cache-stale'` rather than `'live'`, so

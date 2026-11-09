@@ -1,7 +1,7 @@
 {
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": ["src/index.ts"],
-  "out": "docs",
+  "out": "docs/api",
   "readme": "none",
   "name": "grydlock-oracle-adapter",
   "includeVersion": true,

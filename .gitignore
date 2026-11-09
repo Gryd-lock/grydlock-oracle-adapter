@@ -1,13 +1,8 @@
 node_modules/
 dist/
-# docs/ is TypeDoc's generated output (see `npm run docs`), so its contents
-# are ignored wholesale — except docs/adr/, which is hand-authored source
-# (Architecture Decision Records), not generated, and must be tracked. (Git
-# can't re-include a path under an excluded directory, so this excludes
-# docs/'s *contents* rather than the directory itself.)
-docs/*
-!docs/adr/
-!docs/adr/**
+# TypeDoc's generated API reference (`npm run docs`). Everything else under
+# docs/ is hand-written and tracked.
+docs/api/
 coverage/
 reports/
 .stryker-tmp/
