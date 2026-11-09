@@ -1,5 +1,5 @@
 dist/
-docs/
+docs/api/
 coverage/
 contract/target/
 contract/test_snapshots/
