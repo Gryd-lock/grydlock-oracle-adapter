@@ -1,789 +1,120 @@
-# grydlock-oracle-adapter 🔌
+# grydlock-oracle-adapter
 
-[![Built on Stellar](https://img.shields.io/badge/Built%20on-Stellar-blue?logo=stellar)](https://stellar.org)
-[![Soroban Smart Contracts](https://img.shields.io/badge/Smart%20Contracts-Soroban-purple)](https://soroban.stellar.org)
+A TypeScript client that reads a 0–100 risk score for a Stellar address or asset from a Soroban
+smart contract. Wallets and browser extensions use it to warn users before they sign.
+
+[![CI](https://github.com/Gryd-lock/grydlock-oracle-adapter/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/Gryd-lock/grydlock-oracle-adapter/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Gryd-lock/grydlock-oracle-adapter)](https://github.com/Gryd-lock/grydlock-oracle-adapter/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Status: In Development](https://img.shields.io/badge/status-in%20development-yellow)](#roadmap)
-[![API Reference](https://img.shields.io/badge/docs-API%20reference-blue)](https://gryd-lock.github.io/grydlock-oracle-adapter/)
 
-Read-client that fetches a 0–100 risk score for a Stellar address or asset from an on-chain risk oracle, and exposes it to the Gryd Lock extension behind a stable interface.
+## Why it matters
 
-## Overview
+Stellar payments are final within seconds and can't be reversed. Scammers rely on that. They
+use lookalike `G…` addresses, muxed `M…` addresses that hide the account behind them, and
+assets with familiar codes, since anyone can issue an asset called `USDC`. A wallet only shows
+the user a 56-character string. Gryd Lock puts a risk score in front of the user at signing
+time, and this adapter is the piece that fetches that score: it validates the destination, reads
+the score on-chain with a free, read-only Soroban simulation, and fails closed. When it can't
+get a trustworthy score, it returns a typed error instead of a misleading "0".
 
-`grydlock-oracle-adapter` is the closest thing Gryd Lock has to a backend — but it runs no server. It is a small, read-only client: given a destination, it calls a Soroban smart contract, reads a score, and returns it. Nothing more.
+## Status
 
-### Quick start: read a live testnet score
+|     | Piece                           | Notes                                                                                                                                                                                                                               |
+| --- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ✅  | Live testnet reads              | `SorobanOracle` + `StellarRpcTransport` call `get_score` through Soroban RPC. Checked nightly against the deployed contract.                                                                                                        |
+| ✅  | Reference contract on testnet   | [`contract/`](contract/): Rust, soroban-sdk 29, 13 unit tests. Deployed as `CA42XDMAPI3QXA4XP6HEBPWD3IHZQ3YJB4MABSURASGGOVYU5QCWSC2M`.                                                                                              |
+| 🟡  | The scores themselves           | **Hardcoded test data.** One admin copied the 12 entries from grydlock-testkit's `scores.json` into the contract. There is no scoring engine.                                                                                       |
+| ✅  | Destination validation          | G / M / C / L addresses and SEP-11 assets, using a from-scratch strkey codec.                                                                                                                                                       |
+| ✅  | Cache, timeout, circuit breaker | Used by grydlock-extension.                                                                                                                                                                                                         |
+| 🟡  | `StubOracle`                    | Offline, fixture-backed, development only. Returns `0` for destinations missing from the fixtures.                                                                                                                                  |
+| 🟡  | Extension integration           | grydlock-extension imports v1.3.0 of this package with its own RPC transport, which doesn't match the deployed contract, so lookups report "unavailable" ([#124](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/124)). |
+| 🟡  | Experimental modules            | Fallback routing, aggregation, batching, provenance, `RiskDecision`: tested but unused ([#130](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/130)).                                                                   |
+| 🟡  | CI health                       | Tests pass, but the `npm audit` gate fails on upstream advisories, the API docs aren't published (Pages is off), and the mutation job is broken. See [docs/development.md](docs/development.md#ci-workflows).                       |
+| ⬜  | Mainnet                         | No mainnet contract, multi-signer admin, audit or RPC failover ([#123](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/123)).                                                                                           |
+| ⬜  | Offline contract tests in CI    | Contract tests run against live testnet rather than a local sandbox ([#92](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/92)).                                                                                        |
+
+## Quick start
+
+You need Node.js 20+ and git. The whole sequence takes about 3 minutes, most of it `npm ci`.
+
+```sh
+git clone https://github.com/Gryd-lock/grydlock-oracle-adapter.git
+cd grydlock-oracle-adapter
+npm ci
+npm run build
+npm test                         # ~370 tests, no network
+node examples/read-score.mjs     # one live read from testnet
+```
+
+Expected output of the last command (the ledger number is when the score was written):
+
+```
+score 92 (live), contract CA42XDMAPI3QXA4XP6HEBPWD3IHZQ3YJB4MABSURASGGOVYU5QCWSC2M, ledger 5635427
+```
+
+Try `node examples/read-score.mjs 'SCAM:GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET'`
+for an asset (97). An address the contract doesn't know prints `no score: UNRECOGNIZED_DESTINATION`.
+The public testnet RPC sometimes takes several seconds to answer.
+
+Using it as a library:
 
 ```ts
 import { createSorobanOracle, GRYDLOCK_TESTNET, OracleError } from 'grydlock-oracle-adapter';
 
-const oracle = createSorobanOracle({ ...GRYDLOCK_TESTNET, environment: 'development' });
-
-try {
-  const r = await oracle.getScoreDetailed(
-    'GD7XPB2A7CG5Z4ICV24B3LXCRHAEJRFEK4OEW3ZIOQAPJOHAXBB7QHGE',
-  );
-  console.log(
-    `score ${r.score} (${r.cacheStatus}) from ${r.contractId} @ ledger ${r.ledgerSequence}`,
-  );
-} catch (e) {
-  console.log(e instanceof OracleError ? `no score: ${e.code}` : e); // never a fake 0
-}
-// → score 92 (live) from CA42XDMAPI3QXA4XP6HEBPWD3IHZQ3YJB4MABSURASGGOVYU5QCWSC2M @ ledger 5635427
-```
-
-This makes a real, read-only Soroban RPC `simulateTransaction` call against the reference
-contract on testnet. Nothing is signed or paid for. Destinations the contract has no score for
-throw `UnrecognizedDestinationError`, and RPC trouble throws `OracleUnavailableError` or
-`OracleTimeoutError`. None of these failures turns into a number.
-
-**Testnet contract:** `CA42XDMAPI3QXA4XP6HEBPWD3IHZQ3YJB4MABSURASGGOVYU5QCWSC2M`
-([stellar.expert](https://stellar.expert/explorer/testnet/contract/CA42XDMAPI3QXA4XP6HEBPWD3IHZQ3YJB4MABSURASGGOVYU5QCWSC2M)),
-seeded with the 12 entries in grydlock-testkit's `scores.json`. Source, interface and deploy
-instructions: [`contract/README.md`](contract/README.md). Deployment record:
-[`contract/deployments/testnet.json`](contract/deployments/testnet.json).
-
-## Status
-
-| Piece                                                                                                       | State                                                                                                                                                                              |
-| ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SorobanOracle` + `StellarRpcTransport` (live `@stellar/stellar-sdk` RPC client)                            | **Working on testnet.** Unit-tested against a fake RPC client, and checked nightly against the deployed contract ([`testnet-nightly.yml`](.github/workflows/testnet-nightly.yml)). |
-| Reference Soroban contract (`contract/`)                                                                    | **Deployed to testnet**, with 13 Rust unit tests. Single admin and hand-curated scores, so it is a test fixture on-chain, not a scoring system.                                    |
-| `StubOracle`                                                                                                | Working. Offline, fixture-backed, development only. Returns `0` for unknown destinations.                                                                                          |
-| Cache / timeout / circuit breaker middleware                                                                | Working. Used by grydlock-extension.                                                                                                                                               |
-| `FallbackOracle`, `RiskOracleAggregator`, `BatchRiskOracle`, `CoalescingOracle`, provenance, `RiskDecision` | **Experimental.** Exported and tested, but nothing consumes them yet, and they may change in a minor release.                                                                      |
-| Mainnet                                                                                                     | **Not supported.** No mainnet contract exists, scoring is not decentralised, and there is no multi-endpoint failover. See the open issues.                                         |
-| grydlock-extension                                                                                          | Ships its own copy of a live transport (with a different, older wire assumption). Switching it to `StellarRpcTransport` is tracked as an issue.                                    |
-
-### The Problem
-
-Gryd Lock needs to warn users about risky Stellar addresses and assets before they sign a transaction, but it should not be in the business of computing that risk itself. Embedding scoring logic directly in the extension would mean:
-
-- The extension would need direct chain access and scoring logic baked into its own codebase
-- Swapping or upgrading the scoring engine would require an extension release
-- There would be no way to develop or test the extension's warning flow without a live oracle
-
-### What grydlock-oracle-adapter Does
-
-At a high level, it does one thing, deliberately narrowly scoped:
-
-- **🔎 Reads** — takes a destination (Stellar address or asset) and calls the on-chain risk oracle's `get_score()` function via Soroban
-- **🔌 Adapts** — normalizes the oracle response behind a single, stable `RiskOracle` interface so the scoring backend can be swapped without touching the extension
-- **📤 Exposes** — returns a plain 0–100 score to the Gryd Lock extension, with no chain-specific types leaking across the boundary
-
-## Documentation
-
-Full API reference is generated from the source JSDoc with [TypeDoc](https://typedoc.org/) and
-published to GitHub Pages on every push to `main`:
-
-**📖 [gryd-lock.github.io/grydlock-oracle-adapter](https://gryd-lock.github.io/grydlock-oracle-adapter/)**
-
-To build the reference locally:
-
-```bash
-npm run docs        # generate the HTML reference into docs/
-npm run docs:check  # validate JSDoc coverage without emitting files (used in CI)
-```
-
-`docs:check` fails if any exported symbol is missing a doc comment, so the published reference
-stays complete as the public surface grows.
-
-## Features
-
-- **`RiskOracle` interface** — one method, `getScore(destination)`, that both implementations satisfy
-- **`StubOracle`** — lookup-table score source backed by vendored `grydlock-testkit` fixtures, for local development and the `grydlock-testkit` evaluation; no network calls
-- **`ProvenanceOracle`** — wraps any `RiskOracle` and emits a structured provenance record (source, timestamp, cache status, latency) for every score, via an injectable `Logger`
-- **`Logger` interface** — minimal structured logging seam (`debug`/`info`/`warn`/`error`) with a no-op default; the library never writes to the console on its own
-- **`SorobanOracle` + `StellarRpcTransport`**: a finality-aware client for the `get_score()` protocol in the [ADR](docs/adr/0001-soroban-oracle-protocol.md), with a live `@stellar/stellar-sdk` RPC transport. `createSorobanOracle()` wires the two together.
-- **Reference contract** (`contract/`): a minimal admin-curated Soroban registry, deployed to testnet
-- **Resilience middleware**: `withCache`, `withTimeout` and `CircuitBreakerOracle`, so a slow or unreachable oracle degrades instead of stalling the signing flow
-
-<!-- TODO: expand this list as real implementation features land -->
-
-## Architecture
-
-```mermaid
-graph TB
-    subgraph Extension["Gryd Lock Extension"]
-        UI[Signing Flow UI]
-    end
-
-    subgraph Adapter["grydlock-oracle-adapter"]
-        IFACE[RiskOracle interface]
-        STUB[StubOracle]
-        SOROBAN[SorobanOracle]
-        TRANSPORT[StellarRpcTransport - rpc.Server simulateTransaction]
-    end
-
-    subgraph Chain["Stellar Testnet"]
-        CONTRACT[grydlock-risk-oracle contract - CA42XD...SC2M]
-    end
-
-    UI -->|getScore destination| IFACE
-    IFACE --> STUB
-    IFACE --> SOROBAN
-    SOROBAN --> TRANSPORT
-    TRANSPORT -->|get_score, read-only simulation| CONTRACT
-```
-
-### Core Components
-
-| Component                    | Role                                                                                                                                | Status                                           |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `src/RiskOracle.ts`          | Defines the `getScore(destination)` contract and the `ScoredResult` metadata types                                                  | Implemented                                      |
-| `src/StubOracle.ts`          | Lookup-table score source, backed by vendored `grydlock-testkit` fixtures                                                           | Implemented, tested                              |
-| `src/ProvenanceOracle.ts`    | Decorator that logs a structured provenance record for every score                                                                  | Implemented, tested                              |
-| `src/Logger.ts`              | Injectable structured `Logger` interface with a no-op default                                                                       | Implemented                                      |
-| `src/SorobanOracle.ts`       | Finality-aware client against the injectable `SorobanRpcTransport` seam (protocol: [ADR](docs/adr/0001-soroban-oracle-protocol.md)) | Implemented, tested                              |
-| `src/StellarRpcTransport.ts` | Live `SorobanRpcTransport`: `rpc.Server` + `simulateTransaction` against `get_score`                                                | Implemented, tested; verified nightly on testnet |
-| `contract/`                  | Reference Soroban risk-oracle contract (Rust, soroban-sdk)                                                                          | Deployed to testnet                              |
-
-`src/fixtures/testkit/` is a vendored, point-in-time copy of `grydlock-testkit`'s
-`destinations.json` and `scores.json` — not a live sync. If the testkit fixtures change, re-copy
-them here, then run `npm run generate:fixtures` to refresh their raw-text companion modules (see
-below), to pick up the update.
-
-Because these files are manually copied rather than pulled in as a dependency, a bad copy —
-truncated file, wrong schema version, non-numeric score — would otherwise pass TypeScript's
-structural typing silently and only surface as a confusing runtime failure. To catch that at the
-source, `src/fixtures/testkit/schema.ts` validates the shape of both files, and
-`src/fixtures/testkit/index.ts` runs that validation once, when the module is first imported
-(not on every `StubOracle.getScore()` call). A malformed fixture throws a `FixtureValidationError`
-naming the offending file, field, and — since validation happens during parsing rather than after
-it — the entry's exact position in the source file:
-
-```
-FixtureValidationError: Invalid vendored fixture "scores.json": score for "GABC..." must be a finite number, got string ("10") (at line 4, column 32, offset 118)
-```
-
-**Loading is incremental, not materialize-then-validate.** `scores.ts`/`destinations.ts` don't
-import the `.json` files directly (which would hand a bundler's JSON loader — or `JSON.parse` — the
-whole file to parse into a JS object graph before validation could even start). Instead:
-
-- `scripts/generate-fixture-text.mjs` emits `scores.text.ts`/`destinations.text.ts`, each just the
-  vendored JSON file's exact source characters embedded as a string constant (`export default
-"...";`). That's a plain string literal any bundler or the browser loads like any other module —
-  no Node-only `fs`/streaming API ships in the bundle, and no special bundler loader config is
-  required downstream. `tests/fixtureText.sync.test.ts` fails the build if a generated file drifts
-  from its source `.json`.
-- `src/fixtures/testkit/jsonScanner.ts` is a small hand-rolled, token-at-a-time JSON tokenizer
-  (`JsonScanner`) over that raw text, tracking line/column/offset as it scans.
-- `schema.ts`'s `parseScoresFixtureIncremental`/`parseDestinationsFixtureIncremental` use it to
-  validate each entry the moment it's tokenized, so a malformed entry throws — with its source
-  position — before any later entry in the file is even scanned. (`validateScoresFixture`/
-  `validateDestinationsFixture`, validating an already-parsed value, remain for callers that have
-  one on hand — e.g. tests.)
-
-`tests/benchmarks/fixtureStreaming.budget.test.ts` enforces this with hard budgets at 50,000
-synthetic destinations (an order of magnitude past the real fixture's size): import-to-first-lookup
-latency stays under 600ms, and — the check that specifically rules out a "parse fully but budget
-generously" shortcut — the incremental parser's peak retained heap stays under a small constant
-multiple of a deliberately-materialize-twice baseline built solely for that comparison, verified
-structurally (via a `JSON.parse` call-count spy) rather than by absolute numbers alone.
-
-`StubOracle` and the test suite both import the validated `scores` / `destinations` exports from
-`src/fixtures/testkit/index.ts` rather than reading the JSON files directly, so any re-copy of the
-testkit fixtures is checked before it can reach either.
-
-## Interface (design)
-
-The adapter exposes one job: turn a destination into a score.
-
-```ts
-interface RiskOracle {
-  // Returns a risk score 0–100 for a Stellar address or asset.
-  getScore(destination: string): Promise<number>;
-}
-```
-
-The extension depends on this shape and nothing beneath it. Two implementations exist:
-
-- **StubOracle** — returns a score from the vendored `grydlock-testkit` fixture lookup table (falling back to a default for unrecognized destinations). Used for development and for the `grydlock-testkit` evaluation. No network.
-- **SorobanOracle** — validates a request, calls `get_score()` on the configured Soroban contract through an injectable `SorobanRpcTransport`, and defensively decodes the response against a versioned protocol schema before returning a score — see [SorobanOracle](#sorobanoracle) below. This package does not yet ship a real, network-connected `SorobanRpcTransport`, so `SorobanOracle` cannot talk to a live contract today.
-
-### Destination validation
-
-Every `destination` is validated and canonicalized before any score lookup, so a malformed or
-forged identifier surfaces as an `InvalidDestinationError` rather than silently scoring as the
-default. The grammar is:
-
-| Shape                    | Example                 | Decision                                 |
-| ------------------------ | ----------------------- | ---------------------------------------- |
-| `G…` ed25519 account     | `GCRRYBV5…`             | Accepted as-is                           |
-| `M…` muxed account       | `MCRRYBV5…`             | Accepted, scored as its base `G` account |
-| `C…` contract address    | `CADQOBYH…`             | Accepted as-is                           |
-| `L…` liquidity pool      | `LAEQSCIJ…`             | Accepted as-is                           |
-| `<code>:<issuer>` asset  | `SCAM:GAJLLIIP…`        | Accepted; SEP-11 code + `G` issuer       |
-| `S…` `T…` `X…` `P…` `B…` | —                       | Rejected: signer/transaction constructs  |
-| anything else            | `not-a-stellar-address` | Rejected                                 |
-
-A muxed address is the same underlying ed25519 account with a routing tag attached, so its
-on-chain risk is the base account's risk — rejecting it would leave a user paying a custodial
-exchange deposit address with no warning at all. The 64-bit subaccount id is still decoded and
-exposed on the validation result for future use.
-
-`src/StrKeyCodec.ts` implements base32, the CRC16-XModem checksum and version-byte/payload-length
-checks from the strkey specification rather than delegating to `@stellar/stellar-sdk`. The SDK's
-`StrKey` appears in exactly one file — `tests/StrKeyCodec.differential.test.ts` — where it is the
-ground-truth oracle for a 5,000+ input differential fuzz suite that asserts identical
-accept/reject verdicts and identical decoded payload bytes.
-
-### Score provenance and metadata
-
-Alongside the bare-number contract, the interface file defines an opt-in metadata shape
-(issue #17's design) so richer sources — fallback chains, caches — can report how a score
-was produced without breaking `getScore` consumers:
-
-```ts
-interface ScoredResult {
-  score: number; // 0–100
-  timestamp: number; // epoch ms when the score was produced
-  source: OracleSource; // which oracle/tier answered, e.g. "StubOracle", "soroban"
-  cacheStatus: CacheStatus; // "live" | "cache-fresh" | "cache-stale" | "default" | "unknown"
-  confidence?: number;
-}
-
-interface DetailedRiskOracle extends RiskOracle {
-  getScoreDetailed(destination: string): Promise<ScoredResult>;
-}
-```
-
-`ProvenanceOracle` is a decorator that wraps any `RiskOracle` and emits one structured
-provenance record per call through an injected `Logger` — callers keep calling
-`getScore(dest)` exactly as before:
-
-```ts
-const oracle = new ProvenanceOracle(new StubOracle(), { logger: myLogger });
-const score = await oracle.getScore(dest); // same number as before
-
-// myLogger.info('score_provenance', {
-//   event: 'score_provenance',
-//   destination: 'G...',
-//   score: 95,
-//   source: 'StubOracle',
-//   cacheStatus: 'unknown',
-//   timestamp: 1752762896000,
-//   latencyMs: 1,
-//   outcome: 'success',
-// })
-```
-
-If the wrapped oracle implements `getScoreDetailed`, its reported source and cache status
-flow into the record; otherwise the record uses the wrapper's configured source label and an
-`"unknown"` cache status. Failed calls are rethrown unchanged and logged at `error` level
-with `outcome: 'error'`.
-
-### Debugging an unexpected score in production
-
-The provenance log is the recommended way to answer "why did the user see this score."
-Wire a real `Logger` into `ProvenanceOracle` (routing to the extension's own logging), then
-filter for `score_provenance` entries for the destination in question. Each entry tells you:
-
-- **`source`** — which oracle/tier actually answered (live contract, cache, stub, default)
-- **`cacheStatus`** — whether the value was live, fresh-from-cache, stale, or a fallback default
-- **`timestamp` / `latencyMs`** — when the call completed and how long it took
-- **`outcome` / `error`** — whether the underlying source failed and why
-
-A disputed Critical-tier warning that traces to `source: "StubOracle"` or
-`cacheStatus: "cache-stale"` is a very different bug than one backed by a live on-chain read —
-the provenance record makes that distinction visible after the fact.
-
-## SorobanOracle
-
-`SorobanOracle` (`src/SorobanOracle.ts`) implements `RiskOracle` + `DetailedRiskOracle` +
-`CancellableRiskOracle` against the finality-aware Soroban contract protocol defined in
-[`docs/adr/0001-soroban-oracle-protocol.md`](docs/adr/0001-soroban-oracle-protocol.md). Read that
-ADR for the full design; this section is a pointer to it plus the practical "what does this PR
-actually ship" summary.
-
-**What's implemented:**
-
-- The protocol itself — contract method, destination encoding, response schema, absence
-  semantics, score range, interface-version checking, and a finality policy that distinguishes
-  "live/verified," "insufficiently final" (rejected), and "stale" (returned but downgraded)
-  results — all defined and runtime-validated in `src/fixtures/soroban/`.
-- Every failure mode as a distinct typed error in `src/OracleError.ts`
-  (`UnsupportedInterfaceVersionError`, `WrongNetworkError`, `WrongContractError`,
-  `MalformedOracleResponseError`, `InsufficientFinalityError`, `ScoreNotYetComputedError`, plus
-  reuse of the existing `UnrecognizedDestinationError`). None of them are a numeric score — this
-  is the direct fix for `StubOracle`'s `DEFAULT_SCORE = 0` fallback, which is correct for a dev
-  stub but must never appear on a production oracle's "I don't know" path.
-- `SorobanOracle` itself, implemented against an injectable `SorobanRpcTransport` interface.
-- `StellarRpcTransport`, the live implementation. It builds a `get_score` invocation, runs it
-  through `rpc.Server.simulateTransaction` with a null source account (no signing, no fees),
-  decodes the `(Score, LedgerStamp, u32)` return value, and maps every failure to an
-  `OracleError`:
-
-  | Failure                                                            | Error                                                     |
-  | ------------------------------------------------------------------ | --------------------------------------------------------- |
-  | RPC unreachable, HTTP/JSON-RPC error, archived entry               | `OracleUnavailableError`                                  |
-  | `requestBudgetMs` elapsed                                          | `OracleTimeoutError`                                      |
-  | `AbortSignal` fired                                                | `OracleCancelledError`                                    |
-  | RPC node is on a different network than configured                 | `WrongNetworkError` (checked before simulating)           |
-  | No contract at `contractId`                                        | `ContractIncompatibilityError`, code `CONTRACT_NOT_FOUND` |
-  | No `get_score`, or argument shape rejected                         | `ContractIncompatibilityError`                            |
-  | Return value isn't `(Score, LedgerStamp, u32)` or fails the schema | `MalformedOracleResponseError`                            |
-
-- A reference contract implementing the protocol (`contract/`), deployed to testnet.
-- Tests: `tests/SorobanOracle.test.ts` (fake transport), `tests/StellarRpcTransport.test.ts`
-  (fake RPC client, real XDR), and `tests/SorobanOracle.testnet.test.ts` (live testnet, opt-in
-  with `GRYDLOCK_LIVE_TESTNET=1`, run nightly in CI).
-
-**Not implemented yet:**
-
-- Failover or consistency checks across multiple RPC endpoints. `createSorobanOracle` takes one
-  `rpcUrl`.
-- A mainnet deployment, or any contract with decentralised or audited scoring.
-- Cancelling the underlying HTTP request on timeout or abort. `rpc.Server` has no per-call
-  `AbortSignal`, so the transport stops waiting straight away and discards the late response.
-
-**Configuration** (`SorobanOracleConfig`, validated eagerly and synchronously — a bad config
-throws at construction time, not on the first call):
-
-```ts
-import {
-  SorobanOracle,
-  SorobanOracleConfig,
-  SorobanRpcTransport,
-  StellarRpcTransport,
-} from 'grydlock-oracle-adapter';
-
-// createSorobanOracle() does all of this for you. This is the long form.
-
-const config: SorobanOracleConfig = {
-  environment: 'production', // 'production' | 'staging' | 'development' | 'test' — required, no default
-  networkPassphrase: 'Public Global Stellar Network ; September 2015',
-  rpcEndpoints: ['https://mainnet.sorobanrpc.com'], // non-empty, well-formed http(s) URLs
-  contractId: 'C...', // must decode as a valid Soroban contract address
-  supportedInterfaceVersionRange: { min: 1, max: 1 },
-  finalityPolicy: { minConfirmations: 2, maxResultAgeMs: 30_000 },
-  requestBudgetMs: 5_000,
-};
-
-const transport: SorobanRpcTransport = new StellarRpcTransport({
-  rpcUrl: config.rpcEndpoints[0],
-  contractId: config.contractId,
-  networkPassphrase: config.networkPassphrase,
+const oracle = createSorobanOracle({
+  ...GRYDLOCK_TESTNET,
+  environment: 'development',
+  requestBudgetMs: 20_000,
 });
 
-const oracle = new SorobanOracle(config, transport);
-const score = await oracle.getScore('G...'); // throws rather than returning 0 for "I don't know"
+try {
+  const result = await oracle.getScoreDetailed(destination); // { score, cacheStatus, ledgerSequence, ... }
+} catch (error) {
+  if (error instanceof OracleError) console.log(error.code); // e.g. UNRECOGNIZED_DESTINATION
+}
 ```
 
-If `environment` is `'production'`, the constructor **refuses** a transport whose `transportKind`
-is `'fixture'` — a mechanical guard, not a convention, against a fixture/stub source ever backing
-a production code path.
+The package is not published to npm. Install it from a git commit or tag. To run the live
+test suite yourself, use `npm run test:live`.
 
-## How the Extension Uses It
-
-```ts
-import {
-  CircuitBreakerOracle,
-  compose,
-  createSorobanOracle,
-  withCache,
-  withTimeout,
-  GRYDLOCK_TESTNET,
-} from 'grydlock-oracle-adapter';
-
-const live = createSorobanOracle({ ...GRYDLOCK_TESTNET, environment: 'production' });
-const oracle = compose(withCache({ ttlMs: 60_000 }))(
-  new CircuitBreakerOracle(withTimeout({ timeoutMs: 3_000 })(live), {
-    failureThreshold: 3,
-    cooldownWindow: 30_000,
-  }),
-);
-const score = await oracle.getScore(dest); // 0–100, or a typed OracleError
-showWarning(score); // extension maps score → tier
-```
-
-The extension's `src/adapter/oracleAdapter.ts` already uses this cache → breaker → timeout
-order. It still constructs its own transport, and moving it to `StellarRpcTransport` is an open
-issue.
-
-## Repository Structure
-
-```
-grydlock-oracle-adapter/
-│
-├── README.md                         ← This file
-├── docs/adr/0001-soroban-oracle-protocol.md ← ADR: the Soroban protocol SorobanOracle targets
-├── package.json                      ← Package manifest and npm scripts
-├── tsconfig.json                     ← TypeScript compiler config (strict mode)
-├── eslint.config.mjs                 ← ESLint flat config
-├── .prettierrc.json                  ← Prettier config
-├── vitest.config.ts                  ← Vitest config
-├── commitlint.config.js              ← Conventional-commits lint rules
-├── stryker.config.json               ← Mutation testing config (src/ tree)
-│
-├── .husky/commit-msg                 ← Local commit-msg hook, runs commitlint
-├── .github/workflows/ci.yml          ← CI: typecheck, lint, format check, test, bundle size, build, smoke tests, commitlint
-├── .github/workflows/contract.yml    ← CI for contract/: fmt, clippy, cargo test, wasm build
-├── .github/workflows/testnet-nightly.yml ← Nightly live-testnet suite; files an issue on failure
-│
-├── contract/                         ← Reference Soroban risk-oracle contract (Rust) — see contract/README.md
-│   ├── src/lib.rs                     ← get_score / set_score / set_pending / clear_score / set_admin + events
-│   ├── src/test.rs                    ← Unit tests (auth, range, absence semantics, events)
-│   └── deployments/testnet.json       ← Deployed contract id, wasm hash, admin, seeded scores
-│
-├── scripts/
-│   ├── deploy-testnet-contract.mjs    ← Build, deploy and seed the contract on testnet (Stellar CLI)
-│   ├── bundle-size.mjs                ← esbuild-based bundle-size budget + tree-shaking check
-│   └── generate-fixture-text.mjs      ← Emits *.text.ts raw-text modules from the vendored *.json
-│
-├── src/
-│   ├── RiskOracle.ts                  ← Interface definition + ScoredResult metadata types
-│   ├── StubOracle.ts                  ← Lookup-table implementation, backed by fixtures/
-│   ├── CoalescingOracle.ts            ← De-duplicates concurrent getScore calls per destination
-│   ├── ProvenanceOracle.ts            ← Decorator emitting a provenance record per score
-│   ├── CircuitBreakerOracle.ts        ← Trips on repeated infrastructure failures, sheds load while open
-│   ├── FallbackOracle.ts              ← Bandit-routed tier chain with graceful degradation
-│   ├── FallbackObserver.ts            ← Observer interface for fallback-chain degradation events
-│   ├── RiskOracleAggregator.ts        ← Weighted-median aggregation across multiple oracle sources
-│   ├── OracleMiddleware.ts            ← Middleware type + compose() for chaining oracle decorators
-│   ├── OracleError.ts                 ← Typed error hierarchy for oracle failures
-│   ├── BatchRiskOracle.ts             ← Batched multi-destination scoring interface
-│   ├── StrKeyCodec.ts                 ← From-scratch Stellar strkey codec (base32 + CRC16-XModem)
-│   ├── DestinationValidator.ts        ← Destination grammar: G/M/C/L addresses + SEP-11 assets
-│   ├── Logger.ts                      ← Injectable structured Logger interface, no-op default
-│   ├── SorobanOracle.ts               ← Finality-aware protocol client (see docs/adr/0001-...)
-│   ├── StellarRpcTransport.ts         ← Live SorobanRpcTransport: rpc.Server + simulateTransaction
-│   ├── createSorobanOracle.ts         ← createSorobanOracle() factory + GRYDLOCK_TESTNET target
-│   ├── middleware/
-│   │   ├── withCache.ts               ← Cost/confidence-aware cache with stale-while-revalidate
-│   │   ├── withTimeout.ts             ← Per-call timeout budget
-│   │   └── withProvenance.ts          ← Middleware form of ProvenanceOracle
-│   ├── fixtures/testkit/
-│   │   ├── destinations.json          ← Vendored grydlock-testkit fixture (labelled destinations)
-│   │   ├── scores.json                ← Vendored grydlock-testkit fixture (destination -> score)
-│   │   ├── destinations.text.ts       ← Generated: destinations.json's raw text as a string constant
-│   │   ├── scores.text.ts             ← Generated: scores.json's raw text as a string constant
-│   │   ├── jsonScanner.ts             ← Hand-rolled incremental JSON tokenizer + position tracking
-│   │   ├── schema.ts                  ← Runtime shape validation (object-based + incremental) for both files
-│   │   └── index.ts                   ← Validates + exports the fixtures once, at module load
-│   ├── fixtures/soroban/
-│   │   ├── protocol.ts                ← Versioned protocol descriptor (contract method, version range, absence variants), validated at module load
-│   │   ├── schema.ts                  ← SorobanScoreRequest/SorobanRawResponse types + decodeSorobanRawResponse validator
-│   │   └── index.ts                   ← Barrel export for this protocol's types/validators
-│   └── index.ts                       ← Barrel export — the package's public API surface
-│
-└── tests/
-    ├── StubOracle.test.ts             ← getScore range + label-ordering tests against the fixtures
-    ├── StrKeyCodec.test.ts            ← base32 / CRC16-XModem / version-byte unit tests
-    ├── StrKeyCodec.differential.test.ts ← 5k-input differential fuzz against the SDK's StrKey
-    ├── DestinationValidator.test.ts   ← destination grammar + SEP-11 asset-code boundary tests
-    ├── fixtureSchema.incremental.test.ts ← Incremental parser parity + position assertions
-    ├── fixtureText.sync.test.ts       ← Fails if a generated *.text.ts drifts from its source .json
-    ├── benchmarks/fixtureStreaming.budget.test.ts ← Enforced latency/memory budgets at 50k entries
-    ├── ProvenanceOracle.test.ts       ← provenance record shape, pass-through, and error-path tests
-    ├── SorobanOracle.test.ts          ← protocol/finality/error-mapping/cancellation tests against a fake transport
-    ├── StellarRpcTransport.test.ts    ← live transport against a fake RPC client: encoding, decoding, error mapping
-    ├── SorobanOracle.testnet.test.ts  ← live-testnet suite against the deployed contract; opt in with GRYDLOCK_LIVE_TESTNET=1
-    └── support/FakeSorobanRpcTransport.ts ← deterministic in-memory SorobanRpcTransport fake used by the above
-```
-
-## Quick Start
-
-```bash
-npm install
-npm run build      # compile src/ to dist/cjs (CommonJS) and dist/esm (ES modules), with declarations
-npm test           # run the test suite
-npm run typecheck  # tsc --noEmit
-npm run lint       # eslint .
-npm run format     # prettier --write .
-npm run size       # bundle-size budget + tree-shaking check
-```
-
-```ts
-import { CoalescingOracle, Logger, StubOracle } from 'grydlock-oracle-adapter';
-
-// Optional: structured logger injection (no-op by default).
-const logger: Logger = {
-  debug: (message, meta) => console.debug(message, meta),
-  info: (message, meta) => console.info(message, meta),
-  warn: (message, meta) => console.warn(message, meta),
-  error: (message, meta) => console.error(message, meta),
-};
-
-const oracle = new CoalescingOracle(new StubOracle(), logger);
-
-const score = await oracle.getScore('GAJLLIIPHII6OCG4KQJIGPCHVN6DNCRBXHX6DEUTPE7MQ6OONAYBRLET'); // 95, labelled "malicious" in grydlock-testkit
-```
-
-The imports above come from the package entry point (`src/index.ts`). It is split into a
-**stable** section (the live Soroban client, `StubOracle`, `compose` / `withCache` /
-`withTimeout` / `CircuitBreakerOracle`, the error taxonomy, destination validation) and an
-**experimental** section (`FallbackOracle`, `RiskOracleAggregator`, `BatchRiskOracle`,
-`CoalescingOracle`, provenance and the `RiskDecision` contract). Experimental exports are
-tagged `@experimental` in the API reference and may change in a minor release.
-
-### Composing cross-cutting concerns
-
-The middleware compose through `compose` (or by hand, since each one is a plain
-`(next: RiskOracle) => RiskOracle` wrapper). The FIRST middleware listed is the
-OUTERMOST layer — it sees the caller's `getScore` first and its result last, exactly
-like reading the list top-to-bottom as layers around the oracle:
-
-```ts
-import { compose, withCache, withTimeout, withProvenance, StubOracle } from './src';
-
-const oracle = compose(
-  withCache({ ttlMs: 30_000 }), // outermost: a cache hit skips everything below
-  withProvenance(), // emits one score_provenance record per call
-  withTimeout({ timeoutMs: 1_500 }), // innermost: bounds the raw call
-)(new StubOracle());
-```
-
-The recommended production order puts `withCache` outermost (so hits skip every other
-concern), `withProvenance` next (so the provenance record reflects cached serves),
-with `withTimeout` innermost directly around the raw oracle so
-each underlying attempt gets its own budget. `compose`'s result type reflects exactly
-which layers preserve or add `getScoreDetailed`.
-
-## Tech Stack
-
-- **TypeScript** with `@stellar/stellar-sdk` (`rpc.Server`, XDR): the client
-- **Rust** with `soroban-sdk` 29: the reference contract
-- **Stellar CLI**: contract build and deploy
-- **Stellar Testnet**: all development
-
-## Testing
-
-```bash
-npm test
-```
-
-Covers:
-
-- `StubOracle.getScore` returns a number within 0–100 for every destination in the vendored `grydlock-testkit` fixtures, and a default score for unrecognized destinations
-- Fixture destinations labelled `malicious` score higher than those labelled `clean`
-- `ProvenanceOracle` passes scores through unchanged, emits one structured provenance record per `getScore`/`getScoreDetailed` call (source, timestamp, cache status, latency), reflects metadata from `DetailedRiskOracle` inners, and logs an `error` outcome when the wrapped oracle throws
-
-## Bundle Size & Tree-Shaking
-
-Because this package ships inside a browser extension (`grydlock-extension`), its footprint
-directly affects extension load time and web-store review. CI enforces both a size budget and
-tree-shaking behavior on every PR:
-
-```bash
-npm run size
-```
-
-The check (`scripts/bundle-size.mjs`) bundles the package with esbuild (minified ESM, from the
-TypeScript source — the same consumption path the extension's bundler will use) for
-representative import patterns:
-
-| Import pattern                   | Current size (minified)  | Budget |
-| -------------------------------- | ------------------------ | ------ |
-| `import { StubOracle }` only     | ~9.6 KB (~3.9 KB gzip)   | 10 KB  |
-| Full barrel (`export * from ..`) | ~30.2 KB (~10.9 KB gzip) | 40 KB  |
-
-Two things fail the check:
-
-- **Budget regression** — a pattern's minified size exceeds its budget. If the growth is
-  intentional (a real feature), raise the budget in `scripts/bundle-size.mjs` in the same PR
-  and call it out in the PR description.
-- **Tree-shaking leak** — the `StubOracle`-only pattern bundles any module outside its
-  explicit allowlist (`StubOracle`, the `RiskOracle` types, and the score fixtures). This
-  guarantees that importing only `StubOracle` never drags in `SorobanOracle`, aggregation, or
-  other future code; when new modules are added to the barrel, they must be tree-shakeable
-  (no module-level side effects) or the check fails.
-
-**For extension-side contributors:** the "StubOracle only" row is the integration cost of the
-current recommended usage — under 4 KB gzipped added to the extension bundle.
-
-### Mutation testing
-
-Line/branch coverage only shows whether code executed during a test run, not whether the test
-actually asserted on the result. [Stryker Mutator](https://stryker-mutator.io/) is configured
-(`stryker.config.json`) to measure that: it makes small deliberate changes ("mutants") to
-`src/**/*.ts` — e.g. flipping `??` to `&&`, deleting a return value — and reruns the test suite
-against each one. A mutant that still passes the suite ("survived") marks a gap: the code path
-ran, but nothing would have caught it breaking.
-
-```bash
-npm run test:mutation
-```
-
-**Baseline (established alongside this tooling, `src/StubOracle.ts` at the time):** Stryker found
-2 mutants in the only file with executable logic (`RiskOracle.ts` is a type-only interface and
-`index.ts` is a barrel export — TypeScript erases the former and there's nothing to mutate in the
-latter). Of those 2:
-
-- **1 killed** — the `??` → `&&` mutation in `getScore` is caught by the existing "malicious scores
-  higher than clean scores" test.
-- **1 compile error** — deleting the function body trips `tsc`'s "must return a value" check before
-  the mutant ever reaches a test run. This is caught by the `typescript` checker, not a test; it's
-  effectively an equivalent mutant given the codebase's `strict` TypeScript config, and isn't
-  counted against the mutation score.
-- **0 survived.**
-
-Mutation score: **100%** (1/1 of the mutants Stryker could actually run against).
-
-**Threshold policy:** informational-only for now — `thresholds.break` is `null`, so a low score
-won't fail CI, and mutation testing runs nightly via
-[`.github/workflows/mutation.yml`](.github/workflows/mutation.yml) (also triggerable manually)
-rather than gating every PR, since a full mutation run is slower than the rest of the CI pipeline.
-Revisit this once `SorobanOracle` and the resilience features land and there's a meaningfully
-larger surface — at that point, consider setting `thresholds.break` and/or moving the check into
-the main `ci.yml` pipeline.
-
-## Roadmap
-
-- [x] Define the `RiskOracle` interface and ship `StubOracle`
-- [x] Back `StubOracle` with vendored `grydlock-testkit` fixtures instead of a hardcoded table
-- [ ] Wire `StubOracle` into the extension and confirm the query path end to end on testnet
-- [x] Define the finality-aware Soroban oracle protocol ([ADR](docs/adr/0001-soroban-oracle-protocol.md)) and scaffold `SorobanOracle` against an injectable `SorobanRpcTransport`
-- [x] Implement a real, network-connected `SorobanRpcTransport` (`StellarRpcTransport`) and verify `SorobanOracle` against a deployed testnet contract
-- [x] Add caching, a timeout and a circuit breaker so a slow or unreachable oracle degrades gracefully instead of stalling the signing flow
-- [ ] Move grydlock-extension onto `StellarRpcTransport` and the reference contract's interface
-- [ ] Multi-signer admin, batch reads, score provenance events, RPC failover, then a mainnet readiness review (see the open issues)
-
-## Why This Matters for Gryd Lock
-
-- **For the extension** — never talks to the chain directly; it just asks the adapter for a score
-- **For the scoring backend** — pluggable; swap the oracle and nothing upstream changes
-- **For development** — the signing-flow UI can be built and tested against `StubOracle` with no live backend at all
-
-## Dependencies
-
-- TypeScript ^6.0.3, Vitest ^4.1.10, ESLint ^10.6.0 + typescript-eslint ^8.63.0, Prettier ^3.9.4 — see `package.json` for the full, pinned list
-- `@stellar/stellar-sdk`: used by `src/StellarRpcTransport.ts` (`rpc.Server`, transaction building, XDR). Only modules that import the live client pull it in: `StubOracle`-only bundles stay SDK-free, which `npm run size` checks. The build keeps it external. Destination validation is still a from-scratch, dependency-free reimplementation (`src/StrKeyCodec.ts`), which `tests/StrKeyCodec.differential.test.ts` fuzzes against the SDK's `StrKey`.
-- `package.json`'s `overrides.axios` pins `axios` to `^1.18.1`. `@stellar/stellar-sdk` (every release from 15.0.1 through the current 16.0.1) pins an exact, older `axios` that falls in several since-patched advisories' vulnerable ranges, all fixed in `axios@1.18.0`. The SDK's default entry point uses its `fetch` HTTP client, not axios, so the override is defence in depth. Remove it once the SDK bumps its own pin upstream.
-
-## License
-
-MIT
-
-## Contributing
-
-grydlock-oracle-adapter is being developed as an open-source contribution to the Stellar ecosystem. We are actively looking for collaborators with experience in:
-
-- Stellar / Soroban smart contract development (Rust)
-- TypeScript backend and browser-extension development
-- On-chain data analysis and Stellar Horizon API integration
-- Testing and evaluation methodology (`grydlock-testkit`)
-
-Quick checklist for contributions:
-
-- All tests pass: `npm test`
-- Code follows project style guidelines: `npm run lint` and `npm run format:check`
-- New features include tests
-- Documentation is updated
-- Commit messages follow the [Conventional Commits](https://www.conventionalcommits.org/) style below
-
-### Commit message convention
-
-Commit messages are linted with [commitlint](https://commitlint.js.org/) using the
-[`@commitlint/config-conventional`](https://github.com/conventional-changelog/commitlint/tree/master/%40commitlint/config-conventional)
-preset, so that commit history stays parseable for automated semantic versioning. Every commit
-message must follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-```
-
-Common `<type>` values:
-
-| Type       | Use for                                                        |
-| ---------- | -------------------------------------------------------------- |
-| `feat`     | A new feature                                                  |
-| `fix`      | A bug fix                                                      |
-| `docs`     | Documentation-only changes                                     |
-| `style`    | Formatting changes with no code meaning change (e.g. Prettier) |
-| `refactor` | A code change that neither fixes a bug nor adds a feature      |
-| `test`     | Adding or correcting tests                                     |
-| `chore`    | Tooling, dependency, or build-process changes                  |
-
-Examples:
-
-```
-feat: add SorobanOracle implementation
-fix(RiskOracle): handle missing destination score
-docs: update README license section to MIT
-chore: add commitlint and husky commit-msg hook
-```
-
-This is enforced two ways:
-
-- **Locally** — a husky `commit-msg` hook runs `commitlint` on every commit. Run `npm install`
-  once after cloning so husky installs the hook (via the `prepare` script).
-- **In CI** — the `commitlint` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
-  lints every commit on a pull request, covering contributors who bypass the local hook (e.g.
-  `git commit --no-verify`).
-
-### Release process
-
-Versioning and `CHANGELOG.md` are automated with
-[semantic-release](https://semantic-release.gitbook.io/), driven entirely by the Conventional
-Commits history above — there is no manual version bump.
-
-- **Trigger**: [`.github/workflows/release.yml`](.github/workflows/release.yml) runs
-  semantic-release on every push to `main`.
-- **Version bump**: derived from commit types since the last release — `fix:` → patch,
-  `feat:` → minor, a `BREAKING CHANGE:` footer → major. Commits that don't map to a bump
-  (`docs`, `chore`, `style`, etc.) don't trigger a release.
-- **Output**: a Git tag, an updated `CHANGELOG.md`, and a GitHub Release with generated notes.
-  The `package.json` `version` field is updated and committed back to `main` by the
-  `@semantic-release/git` plugin (commit message `chore(release): <version> [skip ci]`, which
-  intentionally skips re-triggering CI/release).
-- **npm publishing**: **not enabled.** This package is `"private": true` and not intended for
-  npm consumption today, so the `@semantic-release/npm` plugin is deliberately omitted from
-  [`.releaserc.json`](.releaserc.json). Releases are tags + changelog + GitHub Release only.
-  If the package needs to be published to npm later, that's a separate decision — add the
-  `@semantic-release/npm` plugin and flip `private` to `false` at that point.
-- **Tooling install**: semantic-release and its plugins are resolved by `npx` at release time
-  rather than added to `devDependencies`/`package-lock.json`, so this workflow doesn't require
-  a lockfile change to adopt.
-
-## Gryd Lock Organization
-
-Gryd Lock is split across four repos in the `Gryd-lock` GitHub org:
-
-| Repo                                                                    | Role                                                                                                                                                                       | Has code?                                                                                                                                                                |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`grydlock-research`](https://github.com/Gryd-lock/grydlock-research)   | Design study: threat model, system design, warning-tier thresholds, evaluation methodology. The reasoning the other three repos implement.                                 | No — design docs only                                                                                                                                                    |
-| [`grydlock-extension`](https://github.com/Gryd-lock/grydlock-extension) | Browser extension. Intercepts a wallet's signing flow (Freighter first), decodes the pending transaction, asks the oracle adapter for a score, and shows a tiered warning. | Yes — early build: Freighter intercept, XDR decode, and warning popup implemented                                                                                        |
-| **`grydlock-oracle-adapter`** _(this repo)_                             | Read-only client. Exposes `RiskOracle.getScore(destination)` to the extension; backed by `StubOracle` today, `SorobanOracle` once a live transport exists.                 | Yes — `RiskOracle` + `StubOracle` implemented and tested; `SorobanOracle` protocol + scaffolding implemented and tested against a fake transport (no live transport yet) |
-| [`grydlock-testkit`](https://github.com/Gryd-lock/grydlock-testkit)     | Testnet fixtures and stub scores used to evaluate the extension + adapter together.                                                                                        | Yes — labelled destinations, stub scores, and sample XDRs implemented, with a fixture validator in CI                                                                    |
-
-### How a signing flow moves through them
+## How it works
 
 ```mermaid
 graph LR
-    SIGN[Wallet signing flow] --> EXT[grydlock-extension\nintercept + decode]
-    EXT -->|getScore destination| ADAPTER[grydlock-oracle-adapter\nRiskOracle]
-    ADAPTER -->|StubOracle today| SCORE[0-100 score]
-    ADAPTER -.->|SorobanOracle later| CHAIN[On-chain risk oracle]
-    SCORE --> EXT
-    EXT --> TIER[Warning tier]
-    TIER --> USER{User decision}
+    EXT[Wallet / extension] -->|getScore destination| ORACLE[SorobanOracle]
+    ORACLE -->|validate + encode| T[StellarRpcTransport]
+    T -->|simulateTransaction get_score| RPC[Soroban RPC]
+    RPC --> C[grydlock-risk-oracle contract]
+    T -->|Score, LedgerStamp, version| ORACLE
+    ORACLE -->|score or typed OracleError| EXT
 ```
 
-`grydlock-testkit` supplies the fixture destinations and expected scores that `grydlock-extension`
-and `grydlock-oracle-adapter` are evaluated against. `grydlock-research` is upstream of all
-three — it defines the threat model and the warning-tier thresholds below.
+1. The destination is validated before any network call.
+2. The transport simulates the contract's read-only `get_score` call. Nothing is signed or paid
+   for.
+3. `SorobanOracle` re-checks the response: schema, interface version, network, contract id, and
+   ledger finality.
+4. It returns a score, or a typed error such as `UnrecognizedDestinationError` or
+   `WrongNetworkError`. A failure never becomes a number.
 
-### Shared contracts (must stay in sync across repos)
+More detail:
 
-**1. `RiskOracle` interface** — defined here at `src/RiskOracle.ts`:
+- [docs/architecture.md](docs/architecture.md): request path, validation, fixtures, middleware,
+  stable vs experimental API, bundle size.
+- [docs/adr/0001-soroban-oracle-protocol.md](docs/adr/0001-soroban-oracle-protocol.md): the
+  wire protocol and finality policy.
+- [docs/errors.md](docs/errors.md): every error code.
+- [contract/README.md](contract/README.md): the contract interface, events, and how to deploy it.
 
-```ts
-interface RiskOracle {
-  getScore(destination: string): Promise<number>; // 0-100
-}
-```
+## How it fits in the project
 
-`grydlock-extension` depends on this shape only — it does not know whether the score came from
-`StubOracle` or a live oracle. If this signature changes, `grydlock-extension` needs a matching
-update.
+| Repo                                                                  | Relationship (as implemented in code today)                                                                                                                                                                                                                            |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [grydlock-extension](https://github.com/Gryd-lock/grydlock-extension) | **Uses this package.** It installs a pinned commit (currently v1.3.0) and builds it on postinstall. It imports `SorobanOracle`, `StubOracle`, `CircuitBreakerOracle`, `withCache`, `withTimeout` and the error types. Its score source is off by default.              |
+| [grydlock-testkit](https://github.com/Gryd-lock/grydlock-testkit)     | **Data source.** Its `scores.json` and `destinations.json` are vendored in `src/fixtures/testkit/` for `StubOracle` (refreshed weekly), and its `scores.json` seeded the testnet contract. The testkit's CI runs a consumer test against a pinned commit of this repo. |
+| [grydlock-research](https://github.com/Gryd-lock/grydlock-research)   | **Defines the warning tiers.** There is no code dependency. `npm run sync:check` checks that the table below matches it.                                                                                                                                               |
 
-**2. Warning tiers** — defined in `grydlock-research`, consumed by `grydlock-extension` to decide
-how loudly to warn:
+The extension maps scores to tiers:
 
 | Score  | Tier     | Behaviour                       |
 | ------ | -------- | ------------------------------- |
@@ -792,78 +123,52 @@ how loudly to warn:
 | 51–75  | High     | Strong warning, require confirm |
 | 76–100 | Critical | Recommend abort                 |
 
-### Verifying cross-repo sync (canonical method)
+## Project structure
 
-Don't verify the shared contracts above by reading READMEs across repos — that's exactly the
-manual process that lets drift slip through. The canonical way to check sync is:
-
-```bash
-npm run sync:check
+```
+src/                     TypeScript client (public API in src/index.ts)
+  SorobanOracle.ts       finality-aware oracle: validation, trust checks, error mapping
+  StellarRpcTransport.ts live Soroban RPC transport (@stellar/stellar-sdk)
+  createSorobanOracle.ts factory + GRYDLOCK_TESTNET target
+  StubOracle.ts          offline fixture-backed oracle for development
+  middleware/            withCache, withTimeout, withProvenance
+  fixtures/testkit/      vendored grydlock-testkit fixtures and their parser
+  fixtures/soroban/      protocol descriptor and response schema
+contract/                Rust Soroban contract, unit tests, testnet deployment record
+examples/                runnable examples (read-score.mjs)
+tests/                   unit, fuzz, concurrency, type and live-testnet tests
+scripts/                 build, bundle-size, smoke, fixture sync, deploy, cross-repo sync
+docs/                    architecture, errors, development, ADRs
+.github/workflows/       CI, contract, nightly testnet, release, sync jobs
 ```
 
-`scripts/check-cross-repo-sync.mjs` fetches the current state of the contracts from the other
-public repos and diffs them against this repo:
+## Roadmap
 
-- **Warning tiers** — parses the canonical table in `grydlock-research`'s README and compares
-  it against both `grydlock-extension`'s implementation (`src/lib/tiers.ts`) and this repo's
-  own README table
-- **`RiskOracle.getScore`** — compares the signature in `src/RiskOracle.ts` against the
-  stand-in the extension declares in `src/adapter/oracleAdapter.ts`
+In priority order:
 
-On drift it prints a PASS/FAIL report with the expected (canonical) vs actual values, writes
-`drift-report.md`, and exits non-zero. CI runs it weekly (Mondays 06:00 UTC, plus on PRs that
-touch a contract surface — see `.github/workflows/cross-repo-sync.yml`), since drift
-originates in the other repos rather than in pushes here; a scheduled run that finds drift
-automatically opens (or updates) a tracking issue labelled `cross-repo-drift`. A fetch or
-parse failure exits with a distinct code (2) and is reported as "needs a human look", not as
-confirmed drift.
+- [ ] Move grydlock-extension onto `StellarRpcTransport` and the deployed contract ([#124](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/124))
+- [ ] Get every CI gate green again: dependency audit, API docs publishing, mutation testing ([#94](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/94))
+- [ ] Move the testnet admin key into CI-managed custody and add a re-seed workflow ([#128](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/128))
+- [ ] Multi-signer admin for score writes ([#120](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/120))
+- [ ] RPC failover and real request cancellation ([#125](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/125), [#126](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/126))
+- [ ] Batch reads and score provenance events ([#122](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/122), [#121](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/121))
+- [ ] Offline Soroban sandbox for contract tests in CI ([#92](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/92))
+- [ ] Mainnet readiness review ([#123](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues/123))
 
-### Conventions for AI Agents
+## Contributing
 
-- Treat this section as the source of truth for **cross-repo** context. Each repo's own README
-  covers repo-local conventions.
-- Before assuming a name/function/interface still exists in another repo, verify it there — this
-  reflects each repo's state as of the last time it was checked, not a live feed. For the two
-  shared contracts above, run `npm run sync:check` instead of eyeballing.
-- If a change here affects `RiskOracle` or the warning-tier thresholds, call it out so the
-  corresponding repo can be updated.
+1. Pick an [open issue](https://github.com/Gryd-lock/grydlock-oracle-adapter/issues). Each has a
+   `difficulty:` label and acceptance criteria, and `good first issue` marks good starting points.
+   Comment on it before you start.
+2. Run the checks locally:
+   `npm run typecheck && npm run lint && npm test && npm run size && npm run build`.
+3. Open a PR with [Conventional Commits](https://www.conventionalcommits.org/) messages, which
+   drive releases, and link the issue.
 
-## Support
+The full guide, including contract work and supply-chain rules, is in
+[CONTRIBUTING.md](CONTRIBUTING.md). Development commands and CI are covered in
+[docs/development.md](docs/development.md).
 
-For issues and questions:
+## License
 
-- GitHub Issues: https://github.com/Gryd-lock/grydlock-oracle-adapter/issues
-- Stellar Discord: https://discord.gg/stellar
-
----
-
-<div align="center">
-
-**grydlock-oracle-adapter** — the one door Gryd Lock knocks on for a risk score.
-
-_Part of the Gryd Lock project. Interface defined, live oracle not yet wired._
-
-## Oracle Error Types
-
-| Error                            | Code                          | Meaning                                                                                                                        | Typical Cause                                                    |
-| -------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| OracleUnavailableError           | ORACLE_UNAVAILABLE            | The oracle could not be reached.                                                                                               | Network outage, RPC unavailable                                  |
-| OracleTimeoutError               | ORACLE_TIMEOUT                | The oracle request timed out.                                                                                                  | Slow network or unresponsive RPC                                 |
-| OracleCancelledError             | ORACLE_CANCELLED              | The request was cancelled via an `AbortSignal`.                                                                                | Caller (or middleware) aborted the request                       |
-| InvalidDestinationError          | INVALID_DESTINATION           | The supplied Stellar destination is invalid.                                                                                   | Malformed address or asset identifier                            |
-| UnrecognizedDestinationError     | UNRECOGNIZED_DESTINATION      | The destination is valid but not recognized.                                                                                   | Destination not present in oracle data                           |
-| ContractIncompatibilityError     | CONTRACT_INCOMPATIBILITY      | The adapter is incompatible with the oracle contract.                                                                          | ABI/version mismatch                                             |
-| UnsupportedInterfaceVersionError | UNSUPPORTED_INTERFACE_VERSION | (`SorobanOracle`) Contract's reported interface version is out of range. `instanceof ContractIncompatibilityError` also holds. | Contract upgraded/downgraded past this adapter's supported range |
-| WrongNetworkError                | WRONG_NETWORK                 | (`SorobanOracle`) Response reported a different network passphrase.                                                            | Misconfigured RPC endpoint or contract id                        |
-| WrongContractError               | WRONG_CONTRACT                | (`SorobanOracle`) Response reported a different contract id.                                                                   | Misconfigured contract id                                        |
-| MalformedOracleResponseError     | MALFORMED_ORACLE_RESPONSE     | (`SorobanOracle`) Response failed protocol schema validation.                                                                  | Transport/contract bug                                           |
-| InsufficientFinalityError        | INSUFFICIENT_FINALITY         | (`SorobanOracle`) Result hasn't reached the configured finality policy.                                                        | Read too soon after the ledger closed                            |
-| ScoreNotYetComputedError         | SCORE_NOT_YET_COMPUTED        | (`SorobanOracle`) Destination is tracked but scoring is still pending.                                                         | Destination recently seen, not yet scored                        |
-| QuorumNotMetError                | QUORUM_NOT_MET                | Fewer than the required quorum of sources answered.                                                                            | Aggregator sources failed/timed out                              |
-
-All of the above (plus the base `OracleError`) are exported from the package entry point
-(`src/index.ts`). Prefer `instanceof` or the `code` field over parsing error messages. See
-[`docs/adr/0001-soroban-oracle-protocol.md`](docs/adr/0001-soroban-oracle-protocol.md) for what
-distinguishes the `SorobanOracle`-specific errors above from one another.
-
-</div>
+[MIT](LICENSE)
